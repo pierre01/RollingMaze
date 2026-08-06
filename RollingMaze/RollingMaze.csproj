@@ -66,6 +66,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\RollingMaze.Mazes\RollingMaze.Mazes.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.90" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.10" />
 		<PackageReference Include="SkiaSharp" Version="4.150.1" />

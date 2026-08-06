@@ -1,6 +1,7 @@
 using Microsoft.Maui.Devices.Sensors;
 using SkiaSharp;
 using SkiaSharp.Views.Maui;
+using RollingMaze.Mazes;
 
 namespace RollingMaze;
 
@@ -27,6 +28,11 @@ public partial class MainPage : ContentPage
     private bool _insideDip;
     private float _lastAccelerationMagnitude = 1f;
     private DateTime _lastKnockAt = DateTime.MinValue;
+    private MazeDefinition _maze = CreateFirstMaze();
+    private bool _usesDesignedObstacles;
+    private int _nextMazeFileIndex;
+    private bool _completedMaze;
+    private static readonly string[] MazeFiles = ["maze2.rollingmaze.json"];
 
     private const float BallRadius = 24f;
     private const float WallInset = 24f;
@@ -122,9 +128,7 @@ public partial class MainPage : ContentPage
 
     private void ResetGame()
     {
-        float left = WallInset + BallRadius + 18;
-        float bottom = Math.Max(WallInset + BallRadius, _boardSize.Height - WallInset - BallRadius - 12);
-        _position = new SKPoint(left, bottom);
+        _position = ToBoardPoint(_maze.Start);
         _velocity = SKPoint.Empty;
         _ballHeight = 0f;
         _verticalVelocity = 0f;
@@ -133,11 +137,28 @@ public partial class MainPage : ContentPage
         _fallProgress = 0f;
         _insideDip = false;
         _won = false;
+        _completedMaze = false;
         _startedAt = DateTime.UtcNow;
         _lastFrame = DateTime.UtcNow;
         WinOverlay.IsVisible = false;
         GenerateObstacles();
         GameCanvas.InvalidateSurface();
+    }
+
+    /// <summary>Loads a designer-created maze. The built-in first maze remains the default.</summary>
+    public void LoadMaze(MazeDefinition maze)
+    {
+        MazeFile.Validate(maze);
+        _maze = maze;
+        _usesDesignedObstacles = true;
+        ResetGame();
+    }
+
+    public async Task LoadMazeFromAppPackageAsync(string fileName)
+    {
+        await using Stream stream = await FileSystem.Current.OpenAppPackageFileAsync(fileName);
+        using var reader = new StreamReader(stream);
+        LoadMaze(MazeFile.Parse(await reader.ReadToEndAsync()));
     }
 
     private void OnGameTick(object? sender, EventArgs e)
@@ -286,9 +307,14 @@ public partial class MainPage : ContentPage
         {
             foreach (MazeWall wall in GetMazeWalls())
             {
-                float closestX = Math.Clamp(_position.X, wall.Left, wall.Right);
+                SKPoint segment = new(wall.End.X - wall.Start.X, wall.End.Y - wall.Start.Y);
+                float lengthSquared = (segment.X * segment.X) + (segment.Y * segment.Y);
+                float t = lengthSquared <= 0.001f ? 0f : Math.Clamp(
+                    (((_position.X - wall.Start.X) * segment.X) + ((_position.Y - wall.Start.Y) * segment.Y)) / lengthSquared, 0f, 1f);
+                float closestX = wall.Start.X + (segment.X * t);
+                float closestY = wall.Start.Y + (segment.Y * t);
                 float dx = _position.X - closestX;
-                float dy = _position.Y - wall.Y;
+                float dy = _position.Y - closestY;
                 float distanceSquared = (dx * dx) + (dy * dy);
                 if (distanceSquared >= collisionRadius * collisionRadius)
                     continue;
@@ -303,8 +329,10 @@ public partial class MainPage : ContentPage
                 }
                 else
                 {
-                    normalX = 0f;
-                    normalY = _velocity.Y >= 0f ? -1f : 1f;
+                    float segmentLength = MathF.Sqrt(lengthSquared);
+                    normalX = segmentLength > 0.001f ? -segment.Y / segmentLength : 0f;
+                    normalY = segmentLength > 0.001f ? segment.X / segmentLength : 1f;
+                    if ((_velocity.X * normalX) + (_velocity.Y * normalY) > 0f) { normalX = -normalX; normalY = -normalY; }
                     distance = 0f;
                 }
 
@@ -337,11 +365,13 @@ public partial class MainPage : ContentPage
             return;
 
         _won = true;
+        _completedMaze = true;
         _velocity = SKPoint.Empty;
         double seconds = (DateTime.UtcNow - _startedAt).TotalSeconds;
         ResultTitleLabel.Text = "GOAL!";
         ResultTitleLabel.TextColor = Color.FromArgb("#F2CF55");
         WinDetailLabel.Text = $"{_ball!.Name} ball • {seconds:0.0} seconds";
+        ContinueButton.Text = _nextMazeFileIndex < MazeFiles.Length ? "NEXT MAZE" : "PLAY AGAIN";
         WinOverlay.IsVisible = true;
     }
 
@@ -377,33 +407,19 @@ public partial class MainPage : ContentPage
 
         _falling = false;
         _won = true;
+        _completedMaze = false;
         ResultTitleLabel.Text = "LOST!";
         ResultTitleLabel.TextColor = Color.FromArgb("#E76D5B");
         WinDetailLabel.Text = "Your ball fell into a hole.";
+        ContinueButton.Text = "TRY AGAIN";
         WinOverlay.IsVisible = true;
     }
 
-    private SKPoint GetGoalCenter() => new(
-        _boardSize.Width - WallInset - GoalRadius - 12,
-        WallInset + GoalRadius + 12);
+    private SKPoint GetGoalCenter() => ToBoardPoint(_maze.Goal);
 
     private IReadOnlyList<MazeWall> GetMazeWalls()
     {
-        float left = WallInset;
-        float right = _boardSize.Width - WallInset;
-        float top = WallInset;
-        float usableHeight = Math.Max(1f, _boardSize.Height - (WallInset * 2f));
-        float usableWidth = Math.Max(1f, right - left);
-
-        return
-        [
-            new(left + (usableWidth * 0.18f), right, top + (usableHeight * 0.20f)),
-            new(left, left + (usableWidth * 0.80f), top + (usableHeight * 0.34f)),
-            new(left + (usableWidth * 0.18f), right, top + (usableHeight * 0.49f)),
-            new(left, left + (usableWidth * 0.82f), top + (usableHeight * 0.63f)),
-            new(left + (usableWidth * 0.18f), right, top + (usableHeight * 0.77f)),
-            new(left, left + (usableWidth * 0.82f), top + (usableHeight * 0.89f))
-        ];
+        return _maze.Walls.Select(w => new MazeWall(ToBoardPoint(w.Start), ToBoardPoint(w.End))).ToArray();
     }
 
     private void GenerateObstacles()
@@ -411,6 +427,13 @@ public partial class MainPage : ContentPage
         _hazardHoles.Clear();
         if (_boardSize.Width <= 0 || _boardSize.Height <= 0)
             return;
+
+        if (_usesDesignedObstacles)
+        {
+            _hazardHoles.AddRange(_maze.Holes.Select(ToBoardPoint));
+            _dipCenter = _maze.Dip is null ? new SKPoint(-1000, -1000) : ToBoardPoint(_maze.Dip);
+            return;
+        }
 
         float left = WallInset + HazardRadius + 10f;
         float right = _boardSize.Width - WallInset - HazardRadius - 10f;
@@ -509,9 +532,9 @@ public partial class MainPage : ContentPage
 
         foreach (MazeWall wall in GetMazeWalls())
         {
-            canvas.DrawLine(wall.Left + 2, wall.Y + 4, wall.Right + 2, wall.Y + 4, shadow);
-            canvas.DrawLine(wall.Left, wall.Y, wall.Right, wall.Y, divider);
-            canvas.DrawLine(wall.Left, wall.Y - 4, wall.Right, wall.Y - 4, edge);
+            canvas.DrawLine(wall.Start.X + 2, wall.Start.Y + 4, wall.End.X + 2, wall.End.Y + 4, shadow);
+            canvas.DrawLine(wall.Start, wall.End, divider);
+            canvas.DrawLine(wall.Start.X, wall.Start.Y - 4, wall.End.X, wall.End.Y - 4, edge);
         }
     }
 
@@ -633,7 +656,24 @@ public partial class MainPage : ContentPage
     private void OnWoodClicked(object? sender, EventArgs e) => SelectBall(BallProfile.Wood);
     private void OnSilverClicked(object? sender, EventArgs e) => SelectBall(BallProfile.Silver);
     private void OnGoldClicked(object? sender, EventArgs e) => SelectBall(BallProfile.Gold);
-    private void OnPlayAgainClicked(object? sender, EventArgs e) => ResetGame();
+    private async void OnPlayAgainClicked(object? sender, EventArgs e)
+    {
+        if (_completedMaze && _nextMazeFileIndex < MazeFiles.Length)
+        {
+            string fileName = MazeFiles[_nextMazeFileIndex++];
+            try
+            {
+                await LoadMazeFromAppPackageAsync(fileName);
+                StatusLabel.Text = $"{_maze.Name}  •  tilt to roll";
+                return;
+            }
+            catch (Exception ex)
+            {
+                StatusLabel.Text = $"Could not load {fileName}: {ex.Message}";
+            }
+        }
+        ResetGame();
+    }
 
     private void OnChangeBallClicked(object? sender, EventArgs e)
     {
@@ -641,6 +681,29 @@ public partial class MainPage : ContentPage
         SelectionOverlay.IsVisible = true;
         StatusLabel.Text = "Choose a ball";
     }
+
+    private SKPoint ToBoardPoint(MazePoint point)
+    {
+        float width = Math.Max(1f, _boardSize.Width - (WallInset * 2f));
+        float height = Math.Max(1f, _boardSize.Height - (WallInset * 2f));
+        return new SKPoint(WallInset + ((float)point.X * width), WallInset + ((float)point.Y * height));
+    }
+
+    private static MazeDefinition CreateFirstMaze() => new()
+    {
+        Name = "Classic",
+        Start = new MazePoint(0.06, 0.94),
+        Goal = new MazePoint(0.94, 0.06),
+        Walls =
+        [
+            new(new(0.18, 0.20), new(1.00, 0.20)),
+            new(new(0.00, 0.34), new(0.80, 0.34)),
+            new(new(0.18, 0.49), new(1.00, 0.49)),
+            new(new(0.00, 0.63), new(0.82, 0.63)),
+            new(new(0.18, 0.77), new(1.00, 0.77)),
+            new(new(0.00, 0.89), new(0.82, 0.89))
+        ]
+    };
 }
 
 internal sealed record BallProfile(
@@ -657,7 +720,7 @@ internal sealed record BallProfile(
         new SKColor(255, 240, 142), new SKColor(211, 158, 34), new SKColor(100, 64, 8));
 }
 
-internal readonly record struct MazeWall(float Left, float Right, float Y);
+internal readonly record struct MazeWall(SKPoint Start, SKPoint End);
 
 internal static class ColorExtensions
 {

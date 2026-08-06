@@ -58,7 +58,7 @@
             <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" Spacing="16" MaximumWidthRequest="400">
                 <Label x:Name="ResultTitleLabel" Text="GOAL!" TextColor="#F2CF55" FontSize="52" FontAttributes="Bold" HorizontalTextAlignment="Center" />
                 <Label x:Name="WinDetailLabel" Text="You made it." TextColor="White" FontSize="18" HorizontalTextAlignment="Center" />
-                <Button Text="PLAY AGAIN" Clicked="OnPlayAgainClicked" BackgroundColor="#D8B949" TextColor="#101713" CornerRadius="18" Padding="28,14" />
+                <Button x:Name="ContinueButton" Text="PLAY AGAIN" Clicked="OnPlayAgainClicked" BackgroundColor="#D8B949" TextColor="#101713" CornerRadius="18" Padding="28,14" />
                 <Button Text="CHANGE BALL" Clicked="OnChangeBallClicked" BackgroundColor="Transparent" BorderColor="#819087" BorderWidth="1" TextColor="#DDE6E0" CornerRadius="18" />
             </VerticalStackLayout>
         </Grid>

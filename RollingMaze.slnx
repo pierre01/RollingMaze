@@ -5,4 +5,6 @@
   <Project Path="RollingMaze/RollingMaze.csproj">
     <Deploy Solution="Debug|*" />
   </Project>
+  <Project Path="RollingMaze.Mazes/RollingMaze.Mazes.csproj" />
+  <Project Path="MazeDesigner/MazeDesigner.csproj" />
 </Solution>

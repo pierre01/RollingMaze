@@ -9,3 +9,15 @@ At the start of the game the user will be asked which type of ball they will use
 Work Balls with different physics work. 
 
 ![Sample1](Images/Sample1.png)
+
+## Maze files and designer
+
+`RollingMaze.Mazes` contains the shared, versioned maze format. The first maze is still hardcoded; later mazes can be loaded from independent `.rollingmaze.json` files. See [the file-format specification](docs/maze-file-format.md) and the bundled `maze2.rollingmaze.json` example.
+
+`MazeDesigner` is a separate Windows WPF application. Run it with:
+
+```powershell
+dotnet run --project MazeDesigner
+```
+
+Choose **Draw wall** and drag on the board, or select a placement tool and click. In **Select / move** mode, drag existing items and use **Delete selected** when needed. The saved files use the exact parser consumed by RollingMaze.

@@ -19,12 +19,22 @@ public partial class MainPage : ContentPage
     private float _ballHeight;
     private float _verticalVelocity;
     private float _landingEffect;
+    private readonly List<SKPoint> _hazardHoles = [];
+    private bool _falling;
+    private float _fallProgress;
+    private SKPoint _fallingInto;
+    private SKPoint _dipCenter;
+    private bool _insideDip;
     private float _lastAccelerationMagnitude = 1f;
     private DateTime _lastKnockAt = DateTime.MinValue;
 
     private const float BallRadius = 24f;
     private const float WallInset = 24f;
     private const float GoalRadius = 34f;
+    private const float HazardRadius = 27f;
+    private const float HazardCaptureRadius = 15f;
+    private const float DipRadius = 52f;
+    private const float DipJumpSpeed = 360f;
 
     /// <summary>
     /// Global rolling-surface resistance. Values near 0.15 feel very slick,
@@ -119,10 +129,14 @@ public partial class MainPage : ContentPage
         _ballHeight = 0f;
         _verticalVelocity = 0f;
         _landingEffect = 0f;
+        _falling = false;
+        _fallProgress = 0f;
+        _insideDip = false;
         _won = false;
         _startedAt = DateTime.UtcNow;
         _lastFrame = DateTime.UtcNow;
         WinOverlay.IsVisible = false;
+        GenerateObstacles();
         GameCanvas.InvalidateSurface();
     }
 
@@ -135,6 +149,13 @@ public partial class MainPage : ContentPage
         if (_ball is null || _won || _boardSize.Width <= 0 || _boardSize.Height <= 0)
             return;
 
+        if (_falling)
+        {
+            UpdateFalling(dt);
+            GameCanvas.InvalidateSurface();
+            return;
+        }
+
         // Profiles alter how strongly tilt accelerates the ball, how quickly it
         // loses speed, and how much energy remains after touching a wall.
         _velocity.X += _tilt.X * _ball.Acceleration * dt;
@@ -144,6 +165,7 @@ public partial class MainPage : ContentPage
         _velocity.Y *= drag;
 
         UpdateBounce(dt);
+        ApplyDipPhysics(dt);
 
         float speed = MathF.Sqrt((_velocity.X * _velocity.X) + (_velocity.Y * _velocity.Y));
         if (speed > _ball.MaxSpeed)
@@ -157,6 +179,7 @@ public partial class MainPage : ContentPage
         _position.Y += _velocity.Y * dt;
         ResolveWallCollisions();
         ResolveMazeCollisions();
+        CheckHazardHoles();
         CheckGoal();
         GameCanvas.InvalidateSurface();
     }
@@ -179,9 +202,56 @@ public partial class MainPage : ContentPage
         _landingEffect = Math.Max(0f, _landingEffect - (dt * 2.8f));
     }
 
+    private void ApplyDipPhysics(float dt)
+    {
+        if (_ballHeight > 5f)
+        {
+            _insideDip = false;
+            return;
+        }
+
+        float dx = _dipCenter.X - _position.X;
+        float dy = _dipCenter.Y - _position.Y;
+        float distance = MathF.Sqrt((dx * dx) + (dy * dy));
+        bool isInside = distance < DipRadius;
+
+        if (!isInside)
+        {
+            if (_insideDip)
+            {
+                float exitSpeed = MathF.Sqrt((_velocity.X * _velocity.X) + (_velocity.Y * _velocity.Y));
+                if (exitSpeed >= DipJumpSpeed)
+                {
+                    // Carrying enough momentum over the far lip launches the ball.
+                    _verticalVelocity = Math.Clamp(260f + ((exitSpeed - DipJumpSpeed) * 0.35f), 260f, 430f);
+                }
+            }
+
+            _insideDip = false;
+            return;
+        }
+
+        _insideDip = true;
+        if (distance > 0.001f)
+        {
+            // A parabolic bowl is steepest near its rim and flat at its center.
+            float slope = distance / DipRadius;
+            float inwardAcceleration = 390f * slope;
+            _velocity.X += (dx / distance) * inwardAcceleration * dt;
+            _velocity.Y += (dy / distance) * inwardAcceleration * dt;
+        }
+
+        // The rougher, compressed floor in the dip bleeds energy. A slow ball
+        // settles at the center unless device tilt overcomes the bowl's incline.
+        float depth = 1f - Math.Clamp(distance / DipRadius, 0f, 1f);
+        float dipDrag = MathF.Exp(-(1.4f + (depth * 1.8f)) * dt);
+        _velocity.X *= dipDrag;
+        _velocity.Y *= dipDrag;
+    }
+
     private void BounceBall()
     {
-        if (_ball is null || _won || _ballHeight > 3f)
+        if (_ball is null || _won || _falling || _ballHeight > 3f)
             return;
 
         _verticalVelocity = 440f;
@@ -269,7 +339,47 @@ public partial class MainPage : ContentPage
         _won = true;
         _velocity = SKPoint.Empty;
         double seconds = (DateTime.UtcNow - _startedAt).TotalSeconds;
+        ResultTitleLabel.Text = "GOAL!";
+        ResultTitleLabel.TextColor = Color.FromArgb("#F2CF55");
         WinDetailLabel.Text = $"{_ball!.Name} ball • {seconds:0.0} seconds";
+        WinOverlay.IsVisible = true;
+    }
+
+    private void CheckHazardHoles()
+    {
+        if (_falling || _ballHeight > 5f)
+            return;
+
+        foreach (SKPoint hole in _hazardHoles)
+        {
+            float dx = _position.X - hole.X;
+            float dy = _position.Y - hole.Y;
+            if ((dx * dx) + (dy * dy) <= HazardCaptureRadius * HazardCaptureRadius)
+            {
+                _falling = true;
+                _fallProgress = 0f;
+                _fallingInto = hole;
+                _velocity = SKPoint.Empty;
+                return;
+            }
+        }
+    }
+
+    private void UpdateFalling(float dt)
+    {
+        _fallProgress = Math.Min(1f, _fallProgress + (dt / 0.65f));
+        float pull = Math.Min(1f, dt * 9f);
+        _position.X += (_fallingInto.X - _position.X) * pull;
+        _position.Y += (_fallingInto.Y - _position.Y) * pull;
+
+        if (_fallProgress < 1f)
+            return;
+
+        _falling = false;
+        _won = true;
+        ResultTitleLabel.Text = "LOST!";
+        ResultTitleLabel.TextColor = Color.FromArgb("#E76D5B");
+        WinDetailLabel.Text = "Your ball fell into a hole.";
         WinOverlay.IsVisible = true;
     }
 
@@ -296,6 +406,52 @@ public partial class MainPage : ContentPage
         ];
     }
 
+    private void GenerateObstacles()
+    {
+        _hazardHoles.Clear();
+        if (_boardSize.Width <= 0 || _boardSize.Height <= 0)
+            return;
+
+        float left = WallInset + HazardRadius + 10f;
+        float right = _boardSize.Width - WallInset - HazardRadius - 10f;
+        float top = WallInset;
+        float height = _boardSize.Height - (WallInset * 2f);
+        float[] wallLevels = [0.20f, 0.34f, 0.49f, 0.63f, 0.77f, 0.89f];
+
+        // Put the broad dip in the middle corridor where it is easy to recognize
+        // and where both approaches leave room to build speed.
+        float dipBandCenter = (wallLevels[2] + wallLevels[3]) * 0.5f;
+        _dipCenter = new SKPoint(
+            left + ((right - left) * 0.52f),
+            top + (height * dipBandCenter));
+
+        // Pick three different interior corridor bands. Keeping the top and bottom
+        // bands clear protects the goal and starting area.
+        // The dip occupies band 3, so holes use other corridors.
+        int[] bands = [1, 2, 4, 5];
+        Random.Shared.Shuffle(bands);
+        for (int i = 0; i < 3; i++)
+        {
+            int band = bands[i];
+            float upper = wallLevels[band - 1];
+            float lower = wallLevels[band];
+            float centerY = top + (height * ((upper + lower) * 0.5f));
+            float safeHalfHeight = Math.Max(0f, ((lower - upper) * height * 0.5f) - HazardRadius - 10f);
+            float jitterY = ((float)Random.Shared.NextDouble() * 2f - 1f) * safeHalfHeight;
+            SKPoint candidate = default;
+            for (int attempt = 0; attempt < 20; attempt++)
+            {
+                float x = left + ((float)Random.Shared.NextDouble() * Math.Max(1f, right - left));
+                candidate = new SKPoint(x, centerY + jitterY);
+                float dx = candidate.X - _dipCenter.X;
+                float dy = candidate.Y - _dipCenter.Y;
+                if ((dx * dx) + (dy * dy) >= MathF.Pow(DipRadius + HazardRadius + 24f, 2f))
+                    break;
+            }
+            _hazardHoles.Add(candidate);
+        }
+    }
+
     private void OnPaintSurface(object? sender, SKPaintSurfaceEventArgs e)
     {
         SKCanvas canvas = e.Surface.Canvas;
@@ -310,6 +466,8 @@ public partial class MainPage : ContentPage
             canvas.DrawLine(WallInset + 18, y, e.Info.Width - WallInset - 18, y, grain);
 
         DrawGoal(canvas);
+        DrawDip(canvas);
+        DrawHazardHoles(canvas);
         DrawMazeWalls(canvas);
         DrawWalls(canvas, e.Info.Width, e.Info.Height);
         if (_ball is not null)
@@ -366,11 +524,54 @@ public partial class MainPage : ContentPage
         canvas.DrawCircle(goal, GoalRadius, hole);
     }
 
+    private void DrawHazardHoles(SKCanvas canvas)
+    {
+        using var rim = new SKPaint { Color = new SKColor(91, 42, 34), IsAntialias = true };
+        using var hole = new SKPaint { Color = new SKColor(1, 4, 3), IsAntialias = true };
+        using var glint = new SKPaint
+        {
+            Color = new SKColor(226, 102, 76, 105),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = true
+        };
+
+        foreach (SKPoint center in _hazardHoles)
+        {
+            canvas.DrawCircle(center.X + 2, center.Y + 4, HazardRadius + 4, rim);
+            canvas.DrawCircle(center, HazardRadius, hole);
+            canvas.DrawArc(new SKRect(center.X - 20, center.Y - 20, center.X + 20, center.Y + 20), 205, 105, false, glint);
+        }
+    }
+
+    private void DrawDip(SKCanvas canvas)
+    {
+        using var outerSlope = new SKPaint { Color = new SKColor(58, 91, 67), IsAntialias = true };
+        using var middleSlope = new SKPaint { Color = new SKColor(29, 59, 41), IsAntialias = true };
+        using var bottom = new SKPaint { Color = new SKColor(18, 39, 27), IsAntialias = true };
+        using var farHighlight = new SKPaint
+        {
+            Color = new SKColor(151, 184, 158, 80),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 3f,
+            IsAntialias = true
+        };
+
+        canvas.DrawCircle(_dipCenter, DipRadius + 5f, outerSlope);
+        canvas.DrawCircle(_dipCenter.X + 2f, _dipCenter.Y + 4f, DipRadius - 8f, middleSlope);
+        canvas.DrawCircle(_dipCenter.X + 4f, _dipCenter.Y + 7f, DipRadius * 0.48f, bottom);
+        canvas.DrawArc(
+            new SKRect(_dipCenter.X - DipRadius, _dipCenter.Y - DipRadius,
+                _dipCenter.X + DipRadius, _dipCenter.Y + DipRadius),
+            195f, 120f, false, farHighlight);
+    }
+
     private void DrawBall(SKCanvas canvas, BallProfile profile)
     {
         float heightRatio = Math.Clamp(_ballHeight / 100f, 0f, 1f);
         float drawnY = _position.Y - (_ballHeight * 0.16f);
-        float ballScale = 1f + (heightRatio * 0.13f);
+        float fallScale = _falling ? Math.Max(0.08f, 1f - (_fallProgress * 0.92f)) : 1f;
+        float ballScale = (1f + (heightRatio * 0.13f)) * fallScale;
         float squashX = 1f + (_landingEffect * 0.22f);
         float squashY = 1f - (_landingEffect * 0.16f);
 

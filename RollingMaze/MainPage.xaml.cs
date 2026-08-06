@@ -31,7 +31,7 @@ public partial class MainPage : ContentPage
     /// 1.0 preserves the original floor, and values around 3.0 feel like velvet.
     /// This is separate from each ball material's own drag.
     /// </summary>
-    public float SurfaceFriction { get; set; } = 1.0f;
+    public float SurfaceFriction { get; set; } = 0.5f;
 
     public MainPage()
     {
@@ -113,8 +113,8 @@ public partial class MainPage : ContentPage
     private void ResetGame()
     {
         float left = WallInset + BallRadius + 18;
-        float top = WallInset + BallRadius + 18;
-        _position = new SKPoint(left, top);
+        float bottom = Math.Max(WallInset + BallRadius, _boardSize.Height - WallInset - BallRadius - 12);
+        _position = new SKPoint(left, bottom);
         _velocity = SKPoint.Empty;
         _ballHeight = 0f;
         _verticalVelocity = 0f;
@@ -156,6 +156,7 @@ public partial class MainPage : ContentPage
         _position.X += _velocity.X * dt;
         _position.Y += _velocity.Y * dt;
         ResolveWallCollisions();
+        ResolveMazeCollisions();
         CheckGoal();
         GameCanvas.InvalidateSurface();
     }
@@ -201,6 +202,57 @@ public partial class MainPage : ContentPage
         if (_position.Y > maxY) { _position.Y = maxY; _velocity.Y = -MathF.Abs(_velocity.Y) * _ball!.Restitution; }
     }
 
+    private void ResolveMazeCollisions()
+    {
+        // A sufficiently high bounce clears the low maze dividers.
+        if (_ballHeight > 12f)
+            return;
+
+        const float dividerRadius = 8f;
+        float collisionRadius = BallRadius + dividerRadius;
+
+        // Resolve twice so corners where a divider meets the outer wall remain stable.
+        for (int pass = 0; pass < 2; pass++)
+        {
+            foreach (MazeWall wall in GetMazeWalls())
+            {
+                float closestX = Math.Clamp(_position.X, wall.Left, wall.Right);
+                float dx = _position.X - closestX;
+                float dy = _position.Y - wall.Y;
+                float distanceSquared = (dx * dx) + (dy * dy);
+                if (distanceSquared >= collisionRadius * collisionRadius)
+                    continue;
+
+                float distance = MathF.Sqrt(distanceSquared);
+                float normalX;
+                float normalY;
+                if (distance > 0.001f)
+                {
+                    normalX = dx / distance;
+                    normalY = dy / distance;
+                }
+                else
+                {
+                    normalX = 0f;
+                    normalY = _velocity.Y >= 0f ? -1f : 1f;
+                    distance = 0f;
+                }
+
+                float correction = collisionRadius - distance;
+                _position.X += normalX * correction;
+                _position.Y += normalY * correction;
+
+                float velocityIntoWall = (_velocity.X * normalX) + (_velocity.Y * normalY);
+                if (velocityIntoWall < 0f)
+                {
+                    float bounce = (1f + _ball!.Restitution) * velocityIntoWall;
+                    _velocity.X -= bounce * normalX;
+                    _velocity.Y -= bounce * normalY;
+                }
+            }
+        }
+    }
+
     private void CheckGoal()
     {
         // An airborne ball passes over holes; it can only drop into the goal
@@ -222,8 +274,27 @@ public partial class MainPage : ContentPage
     }
 
     private SKPoint GetGoalCenter() => new(
-        _boardSize.Width - WallInset - GoalRadius - 18,
-        _boardSize.Height - WallInset - GoalRadius - 18);
+        _boardSize.Width - WallInset - GoalRadius - 12,
+        WallInset + GoalRadius + 12);
+
+    private IReadOnlyList<MazeWall> GetMazeWalls()
+    {
+        float left = WallInset;
+        float right = _boardSize.Width - WallInset;
+        float top = WallInset;
+        float usableHeight = Math.Max(1f, _boardSize.Height - (WallInset * 2f));
+        float usableWidth = Math.Max(1f, right - left);
+
+        return
+        [
+            new(left + (usableWidth * 0.18f), right, top + (usableHeight * 0.20f)),
+            new(left, left + (usableWidth * 0.80f), top + (usableHeight * 0.34f)),
+            new(left + (usableWidth * 0.18f), right, top + (usableHeight * 0.49f)),
+            new(left, left + (usableWidth * 0.82f), top + (usableHeight * 0.63f)),
+            new(left + (usableWidth * 0.18f), right, top + (usableHeight * 0.77f)),
+            new(left, left + (usableWidth * 0.82f), top + (usableHeight * 0.89f))
+        ];
+    }
 
     private void OnPaintSurface(object? sender, SKPaintSurfaceEventArgs e)
     {
@@ -239,6 +310,7 @@ public partial class MainPage : ContentPage
             canvas.DrawLine(WallInset + 18, y, e.Info.Width - WallInset - 18, y, grain);
 
         DrawGoal(canvas);
+        DrawMazeWalls(canvas);
         DrawWalls(canvas, e.Info.Width, e.Info.Height);
         if (_ball is not null)
             DrawBall(canvas, _ball);
@@ -251,6 +323,38 @@ public partial class MainPage : ContentPage
         var rect = new SKRect(WallInset, WallInset, width - WallInset, height - WallInset);
         canvas.DrawRoundRect(rect, 24, 24, shadow);
         canvas.DrawRoundRect(rect, 24, 24, wall);
+    }
+
+    private void DrawMazeWalls(SKCanvas canvas)
+    {
+        using var shadow = new SKPaint
+        {
+            Color = new SKColor(0, 0, 0, 95),
+            StrokeWidth = 20,
+            StrokeCap = SKStrokeCap.Round,
+            IsAntialias = true
+        };
+        using var divider = new SKPaint
+        {
+            Color = new SKColor(135, 95, 50),
+            StrokeWidth = 16,
+            StrokeCap = SKStrokeCap.Round,
+            IsAntialias = true
+        };
+        using var edge = new SKPaint
+        {
+            Color = new SKColor(207, 157, 82),
+            StrokeWidth = 3,
+            StrokeCap = SKStrokeCap.Round,
+            IsAntialias = true
+        };
+
+        foreach (MazeWall wall in GetMazeWalls())
+        {
+            canvas.DrawLine(wall.Left + 2, wall.Y + 4, wall.Right + 2, wall.Y + 4, shadow);
+            canvas.DrawLine(wall.Left, wall.Y, wall.Right, wall.Y, divider);
+            canvas.DrawLine(wall.Left, wall.Y - 4, wall.Right, wall.Y - 4, edge);
+        }
     }
 
     private void DrawGoal(SKCanvas canvas)
@@ -351,6 +455,8 @@ internal sealed record BallProfile(
     public static BallProfile Gold { get; } = new("Gold", 620f, 0.72f, 0.38f, 760f,
         new SKColor(255, 240, 142), new SKColor(211, 158, 34), new SKColor(100, 64, 8));
 }
+
+internal readonly record struct MazeWall(float Left, float Right, float Y);
 
 internal static class ColorExtensions
 {

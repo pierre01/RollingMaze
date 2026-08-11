@@ -37,17 +37,18 @@ public partial class MainPage : ContentPage
     private const float BallRadius = 24f;
     private const float WallInset = 24f;
     private const float GoalRadius = 34f;
-    private const float HazardRadius = 27f;
-    private const float HazardCaptureRadius = 15f;
+    private const float HazardRadius = 34f;
+    private const float HazardCaptureRadius = 22f;
     private const float DipRadius = 52f;
     private const float DipJumpSpeed = 360f;
+    private const float PhoneTiltSensitivity = 1.4f;
 
     /// <summary>
     /// Global rolling-surface resistance. Values near 0.15 feel very slick,
     /// 1.0 preserves the original floor, and values around 3.0 feel like velvet.
     /// This is separate from each ball material's own drag.
     /// </summary>
-    public float SurfaceFriction { get; set; } = 0.5f;
+    public float SurfaceFriction { get; set; } = 0.25f;
 
     public MainPage()
     {
@@ -101,7 +102,9 @@ public partial class MainPage : ContentPage
         // The accelerometer reports the support force, which points opposite the
         // downhill direction. Reverse it so the ball follows the physical tilt.
         // Canvas Y also increases downward, giving Y the sign shown here.
-        _tilt = new SKPoint(-(float)x, (float)y);
+        _tilt = new SKPoint(
+            -(float)x * PhoneTiltSensitivity,
+            (float)y * PhoneTiltSensitivity);
 
         // A knock behind the screen creates a brief acceleration spike. Compare
         // consecutive total-force readings so ordinary steady tilting is ignored.
@@ -563,7 +566,10 @@ public partial class MainPage : ContentPage
         {
             canvas.DrawCircle(center.X + 2, center.Y + 4, HazardRadius + 4, rim);
             canvas.DrawCircle(center, HazardRadius, hole);
-            canvas.DrawArc(new SKRect(center.X - 20, center.Y - 20, center.X + 20, center.Y + 20), 205, 105, false, glint);
+            float glintRadius = HazardRadius - 5f;
+            canvas.DrawArc(
+                new SKRect(center.X - glintRadius, center.Y - glintRadius, center.X + glintRadius, center.Y + glintRadius),
+                205, 105, false, glint);
         }
     }
 
@@ -710,13 +716,13 @@ internal sealed record BallProfile(
     string Name, float Acceleration, float Drag, float Restitution, float MaxSpeed,
     SKColor Highlight, SKColor BaseColor, SKColor Shadow)
 {
-    public static BallProfile Wood { get; } = new("Wood", 680f, 2.8f, 0.28f, 520f,
+    public static BallProfile Wood { get; } = new("Wood", 760f, 2.8f, 0.28f, 650f,
         new SKColor(225, 169, 91), new SKColor(145, 82, 40), new SKColor(70, 36, 21));
 
-    public static BallProfile Silver { get; } = new("Silver", 820f, 1.55f, 0.52f, 680f,
+    public static BallProfile Silver { get; } = new("Silver", 920f, 1.55f, 0.52f, 850f,
         new SKColor(250, 253, 255), new SKColor(150, 164, 170), new SKColor(56, 65, 70));
 
-    public static BallProfile Gold { get; } = new("Gold", 620f, 0.72f, 0.38f, 760f,
+    public static BallProfile Gold { get; } = new("Gold", 700f, 0.72f, 0.38f, 950f,
         new SKColor(255, 240, 142), new SKColor(211, 158, 34), new SKColor(100, 64, 8));
 }
 

@@ -27,6 +27,7 @@
         <RadioButton GroupName="Tools" Content="Place start" Tag="Start" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
         <RadioButton GroupName="Tools" Content="Place goal" Tag="Goal" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
         <RadioButton GroupName="Tools" Content="Place hole" Tag="Hole" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
+        <RadioButton GroupName="Tools" Content="Place black hole" Tag="BlackHole" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
         <RadioButton GroupName="Tools" Content="Place dip" Tag="Dip" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
         <Separator Margin="0,12" />
         <Button Content="Delete selected" Click="Delete_Click" Padding="8" />

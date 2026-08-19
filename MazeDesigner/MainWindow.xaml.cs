@@ -10,8 +10,8 @@ namespace MazeDesigner;
 
 public partial class MainWindow : Window
 {
-    private enum Tool { Select, Wall, Start, Goal, Hole, Dip }
-    private enum DragKind { None, NewWall, Wall, Start, Goal, Hole, Dip }
+    private enum Tool { Select, Wall, Start, Goal, Hole, BlackHole, Dip }
+    private enum DragKind { None, NewWall, Wall, Start, Goal, Hole, BlackHole, Dip }
 
     private MazeDefinition _maze = NewMaze();
     private Tool _tool;
@@ -60,6 +60,7 @@ public partial class MainWindow : Window
                 case Tool.Start: _maze.Start = point; break;
                 case Tool.Goal: _maze.Goal = point; break;
                 case Tool.Hole: _maze.Holes.Add(point); break;
+                case Tool.BlackHole: _maze.BlackHoles.Add(point); break;
                 case Tool.Dip: _maze.Dip = point; break;
             }
             SetDirty();
@@ -68,8 +69,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        HitTestResult? hit = VisualTreeHelper.HitTest(Board, p);
-        if (hit?.VisualHit is FrameworkElement { Tag: EditorTag tagInfo })
+        EditorTag? tagInfo = FindEditorTag(VisualTreeHelper.HitTest(Board, p)?.VisualHit);
+        if (tagInfo is not null)
         {
             _selectedWall = tagInfo.Wall;
             _selectedPoint = tagInfo.Point;
@@ -121,6 +122,11 @@ public partial class MainWindow : Window
                 int index = _maze.Holes.IndexOf(_selectedPoint);
                 if (index >= 0) _maze.Holes[index] = moved;
             }
+            else if (_dragKind == DragKind.BlackHole)
+            {
+                int index = _maze.BlackHoles.IndexOf(_selectedPoint);
+                if (index >= 0) _maze.BlackHoles[index] = moved;
+            }
             _selectedPoint = moved;
         }
         SetDirty();
@@ -162,6 +168,7 @@ public partial class MainWindow : Window
         AddMarker(_maze.Start, DragKind.Start, Brushes.DodgerBlue, "S", 18);
         AddMarker(_maze.Goal, DragKind.Goal, Brushes.Gold, "G", 24);
         foreach (MazePoint hole in _maze.Holes) AddMarker(hole, DragKind.Hole, Brushes.Black, "", 20);
+        foreach (MazePoint blackHole in _maze.BlackHoles) AddMarker(blackHole, DragKind.BlackHole, Brushes.Black, "BH", 42);
         if (_maze.Dip is not null) AddMarker(_maze.Dip, DragKind.Dip, Brushes.SeaGreen, "D", 35);
     }
 
@@ -181,10 +188,24 @@ public partial class MainWindow : Window
         Board.Children.Add(grid);
     }
 
+    private static EditorTag? FindEditorTag(DependencyObject? visual)
+    {
+        while (visual is not null)
+        {
+            if (visual is FrameworkElement { Tag: EditorTag tag })
+                return tag;
+
+            visual = VisualTreeHelper.GetParent(visual);
+        }
+
+        return null;
+    }
+
     private void Delete_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedWall is not null) _maze.Walls.Remove(_selectedWall);
         else if (_selectedPoint is not null && _selectedKind == DragKind.Hole) _maze.Holes.Remove(_selectedPoint);
+        else if (_selectedPoint is not null && _selectedKind == DragKind.BlackHole) _maze.BlackHoles.Remove(_selectedPoint);
         else if (_selectedPoint is not null && _selectedKind == DragKind.Dip) _maze.Dip = null;
         else return;
         _selectedWall = null; _selectedPoint = null; _selectedKind = DragKind.None; SetDirty(); Render();

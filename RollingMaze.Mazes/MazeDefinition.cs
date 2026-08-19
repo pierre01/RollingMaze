@@ -13,6 +13,7 @@ public sealed class MazeDefinition
     public MazePoint Goal { get; set; } = new(0.92, 0.08);
     public List<MazeWallDefinition> Walls { get; set; } = [];
     public List<MazePoint> Holes { get; set; } = [];
+    public List<MazePoint> BlackHoles { get; set; } = [];
     public MazePoint? Dip { get; set; }
 }
 
@@ -58,6 +59,7 @@ public static class MazeFile
         ValidatePoint(maze.Goal, "goal");
         if (maze.Dip is not null) ValidatePoint(maze.Dip, "dip");
         for (int i = 0; i < maze.Holes.Count; i++) ValidatePoint(maze.Holes[i], $"holes[{i}]");
+        for (int i = 0; i < maze.BlackHoles.Count; i++) ValidatePoint(maze.BlackHoles[i], $"blackHoles[{i}]");
         for (int i = 0; i < maze.Walls.Count; i++)
         {
             MazeWallDefinition wall = maze.Walls[i];

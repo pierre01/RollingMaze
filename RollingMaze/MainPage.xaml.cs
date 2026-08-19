@@ -1,3 +1,4 @@
+using Microsoft.Maui.Devices;
 using Microsoft.Maui.Devices.Sensors;
 using SkiaSharp;
 using SkiaSharp.Views.Maui;
@@ -12,6 +13,7 @@ public partial class MainPage : ContentPage
     private SKPoint _position;
     private SKPoint _velocity;
     private SKPoint _tilt;
+    private DisplayRotation _displayRotation = DisplayRotation.Rotation0;
     private SKSize _boardSize;
     private DateTime _lastFrame;
     private DateTime _startedAt;
@@ -21,7 +23,9 @@ public partial class MainPage : ContentPage
     private float _verticalVelocity;
     private float _landingEffect;
     private readonly List<SKPoint> _hazardHoles = [];
+    private readonly List<SKPoint> _blackHoles = [];
     private bool _falling;
+    private bool _fallingIntoBlackHole;
     private float _fallProgress;
     private SKPoint _fallingInto;
     private SKPoint _dipCenter;
@@ -30,15 +34,23 @@ public partial class MainPage : ContentPage
     private DateTime _lastKnockAt = DateTime.MinValue;
     private MazeDefinition _maze = CreateFirstMaze();
     private bool _usesDesignedObstacles;
-    private int _nextMazeFileIndex;
+    private int _currentLevelNumber = 1;
+    private bool _initialLevelLoaded;
     private bool _completedMaze;
-    private static readonly string[] MazeFiles = ["maze2.rollingmaze.json"];
+
+    private const string LevelsFolder = "levels";
 
     private const float BallRadius = 24f;
     private const float WallInset = 24f;
     private const float GoalRadius = 34f;
     private const float HazardRadius = 34f;
     private const float HazardCaptureRadius = 22f;
+    private const float BlackHoleRadius = 32f;
+    private const float BlackHoleAccretionRadius = 66f;
+    private const float BlackHoleGraphicSize = 156f;
+    private const float BlackHoleEventHorizon = 32f;
+    private const float BlackHoleInfluenceRadius = 240f;
+    private const float BlackHoleGravity = 2200f;
     private const float DipRadius = 52f;
     private const float DipJumpSpeed = 360f;
     private const float PhoneTiltSensitivity = 1.4f;
@@ -58,9 +70,29 @@ public partial class MainPage : ContentPage
         _gameTimer.Tick += OnGameTick;
     }
 
-    protected override void OnAppearing()
+    protected override async void OnAppearing()
     {
         base.OnAppearing();
+
+        // Read the active display immediately. A foldable may already be open
+        // when the process starts, so waiting for a display-change event is not enough.
+        _displayRotation = DeviceDisplay.Current.MainDisplayInfo.Rotation;
+        DeviceDisplay.Current.MainDisplayInfoChanged += OnMainDisplayInfoChanged;
+
+        if (!_initialLevelLoaded)
+        {
+            _initialLevelLoaded = true;
+            try
+            {
+                await LoadLevelAsync(_currentLevelNumber);
+                StatusLabel.Text = $"{_maze.Name}  •  choose a ball";
+            }
+            catch (Exception ex)
+            {
+                StatusLabel.Text = $"Could not load level {_currentLevelNumber:000}: {ex.Message}";
+            }
+        }
+
         StartAccelerometer();
         _lastFrame = DateTime.UtcNow;
         _gameTimer.Start();
@@ -69,12 +101,18 @@ public partial class MainPage : ContentPage
     protected override void OnDisappearing()
     {
         _gameTimer.Stop();
+        DeviceDisplay.Current.MainDisplayInfoChanged -= OnMainDisplayInfoChanged;
         if (Accelerometer.Default.IsMonitoring)
         {
             Accelerometer.Default.ReadingChanged -= OnAccelerometerChanged;
             Accelerometer.Default.Stop();
         }
         base.OnDisappearing();
+    }
+
+    private void OnMainDisplayInfoChanged(object? sender, DisplayInfoChangedEventArgs e)
+    {
+        _displayRotation = e.DisplayInfo.Rotation;
     }
 
     private void StartAccelerometer()
@@ -98,6 +136,17 @@ public partial class MainPage : ContentPage
         double x = e.Reading.Acceleration.X;
         double y = e.Reading.Acceleration.Y;
         double z = e.Reading.Acceleration.Z;
+
+        // Sensor axes are fixed to the device's natural orientation; they do not
+        // follow the active display. Remap them so screen-left/up mean the same
+        // thing on cover and inner displays, including when the app starts unfolded.
+        (x, y) = _displayRotation switch
+        {
+            DisplayRotation.Rotation90 => (-y, x),
+            DisplayRotation.Rotation180 => (-x, -y),
+            DisplayRotation.Rotation270 => (y, -x),
+            _ => (x, y)
+        };
 
         // The accelerometer reports the support force, which points opposite the
         // downhill direction. Reverse it so the ball follows the physical tilt.
@@ -137,6 +186,7 @@ public partial class MainPage : ContentPage
         _verticalVelocity = 0f;
         _landingEffect = 0f;
         _falling = false;
+        _fallingIntoBlackHole = false;
         _fallProgress = 0f;
         _insideDip = false;
         _won = false;
@@ -164,6 +214,9 @@ public partial class MainPage : ContentPage
         LoadMaze(MazeFile.Parse(await reader.ReadToEndAsync()));
     }
 
+    private Task LoadLevelAsync(int levelNumber) =>
+        LoadMazeFromAppPackageAsync($"{LevelsFolder}/level{levelNumber:000}{MazeFile.Extension}");
+
     private void OnGameTick(object? sender, EventArgs e)
     {
         DateTime now = DateTime.UtcNow;
@@ -190,6 +243,13 @@ public partial class MainPage : ContentPage
 
         UpdateBounce(dt);
         ApplyDipPhysics(dt);
+        ApplyBlackHolePhysics(dt);
+
+        if (_falling)
+        {
+            GameCanvas.InvalidateSurface();
+            return;
+        }
 
         float speed = MathF.Sqrt((_velocity.X * _velocity.X) + (_velocity.Y * _velocity.Y));
         if (speed > _ball.MaxSpeed)
@@ -283,6 +343,35 @@ public partial class MainPage : ContentPage
         GameCanvas.InvalidateSurface();
     }
 
+    private void ApplyBlackHolePhysics(float dt)
+    {
+        if (_ball is null)
+            return;
+
+        foreach (SKPoint center in _blackHoles)
+        {
+            float dx = center.X - _position.X;
+            float dy = center.Y - _position.Y;
+            float distanceSquared = (dx * dx) + (dy * dy);
+            float distance = MathF.Sqrt(distanceSquared);
+
+            if (distance <= BlackHoleEventHorizon)
+            {
+                BeginFalling(center, true);
+                return;
+            }
+
+            if (distance >= BlackHoleInfluenceRadius || distance <= 0.001f)
+                continue;
+
+            float proximity = 1f - ((distance - BlackHoleEventHorizon) /
+                (BlackHoleInfluenceRadius - BlackHoleEventHorizon));
+            float acceleration = BlackHoleGravity * proximity * proximity * _ball.BlackHoleSusceptibility;
+            _velocity.X += (dx / distance) * acceleration * dt;
+            _velocity.Y += (dy / distance) * acceleration * dt;
+        }
+    }
+
     private void ResolveWallCollisions()
     {
         float minX = WallInset + BallRadius;
@@ -374,7 +463,7 @@ public partial class MainPage : ContentPage
         ResultTitleLabel.Text = "GOAL!";
         ResultTitleLabel.TextColor = Color.FromArgb("#F2CF55");
         WinDetailLabel.Text = $"{_ball!.Name} ball • {seconds:0.0} seconds";
-        ContinueButton.Text = _nextMazeFileIndex < MazeFiles.Length ? "NEXT MAZE" : "PLAY AGAIN";
+        ContinueButton.Text = "NEXT LEVEL";
         WinOverlay.IsVisible = true;
     }
 
@@ -389,13 +478,19 @@ public partial class MainPage : ContentPage
             float dy = _position.Y - hole.Y;
             if ((dx * dx) + (dy * dy) <= HazardCaptureRadius * HazardCaptureRadius)
             {
-                _falling = true;
-                _fallProgress = 0f;
-                _fallingInto = hole;
-                _velocity = SKPoint.Empty;
+                BeginFalling(hole, false);
                 return;
             }
         }
+    }
+
+    private void BeginFalling(SKPoint center, bool isBlackHole)
+    {
+        _falling = true;
+        _fallingIntoBlackHole = isBlackHole;
+        _fallProgress = 0f;
+        _fallingInto = center;
+        _velocity = SKPoint.Empty;
     }
 
     private void UpdateFalling(float dt)
@@ -413,7 +508,9 @@ public partial class MainPage : ContentPage
         _completedMaze = false;
         ResultTitleLabel.Text = "LOST!";
         ResultTitleLabel.TextColor = Color.FromArgb("#E76D5B");
-        WinDetailLabel.Text = "Your ball fell into a hole.";
+        WinDetailLabel.Text = _fallingIntoBlackHole
+            ? "Your ball crossed the event horizon."
+            : "Your ball fell into a hole.";
         ContinueButton.Text = "TRY AGAIN";
         WinOverlay.IsVisible = true;
     }
@@ -428,12 +525,14 @@ public partial class MainPage : ContentPage
     private void GenerateObstacles()
     {
         _hazardHoles.Clear();
+        _blackHoles.Clear();
         if (_boardSize.Width <= 0 || _boardSize.Height <= 0)
             return;
 
         if (_usesDesignedObstacles)
         {
             _hazardHoles.AddRange(_maze.Holes.Select(ToBoardPoint));
+            _blackHoles.AddRange(_maze.BlackHoles.Select(ToBoardPoint));
             _dipCenter = _maze.Dip is null ? new SKPoint(-1000, -1000) : ToBoardPoint(_maze.Dip);
             return;
         }
@@ -493,6 +592,7 @@ public partial class MainPage : ContentPage
 
         DrawGoal(canvas);
         DrawDip(canvas);
+        DrawBlackHoles(canvas);
         DrawHazardHoles(canvas);
         DrawMazeWalls(canvas);
         DrawWalls(canvas, e.Info.Width, e.Info.Height);
@@ -572,6 +672,58 @@ public partial class MainPage : ContentPage
                 205, 105, false, glint);
         }
     }
+
+    private void DrawBlackHoles(SKCanvas canvas)
+    {
+        using var influence = new SKPaint
+        {
+            Color = new SKColor(105, 78, 160, 28),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f,
+            IsAntialias = true
+        };
+        using var diskGlow = new SKPaint
+        {
+            Color = new SKColor(177, 104, 225, 150),
+            Style = SKPaintStyle.Fill,
+            ImageFilter = SKImageFilter.CreateBlur(5f, 5f),
+            IsAntialias = true
+        };
+        using var diskLight = new SKPaint
+        {
+            Color = new SKColor(232, 208, 255, 230),
+            Style = SKPaintStyle.Fill,
+            IsAntialias = true
+        };
+        using var horizon = new SKPaint { Color = new SKColor(0, 0, 0), IsAntialias = true };
+
+        foreach (SKPoint center in _blackHoles)
+        {
+            canvas.DrawCircle(center, BlackHoleInfluenceRadius, influence);
+
+            // black_hole.svg has a 288-square viewBox. Scale its paths once to the
+            // exact gameplay footprint instead of depending on platform image density.
+            float scale = BlackHoleGraphicSize / 288f;
+            canvas.Save();
+            canvas.Translate(center.X - (BlackHoleGraphicSize / 2f), center.Y - (BlackHoleGraphicSize / 2f));
+            canvas.Scale(scale);
+            foreach (SKPath path in BlackHoleGraphicPaths)
+                canvas.DrawPath(path, diskGlow);
+            foreach (SKPath path in BlackHoleGraphicPaths)
+                canvas.DrawPath(path, diskLight);
+            canvas.Restore();
+
+            canvas.DrawCircle(center, BlackHoleRadius, horizon);
+        }
+    }
+
+    // Path data from Resources/Images/black_hole.svg.
+    private static readonly SKPath[] BlackHoleGraphicPaths =
+    [
+        SKPath.ParseSvgPathData("M14 142 L91.2 145 A52.6 52.6 0 0 1 191.6 122.5 L214 130.3 A71.6 71.6 0 0 0 80 111.5 C76.4 117.1 75.2 124.4 70 129 C66.3 133 61.4 136.1 56 137.2 C42.3 140.7 28 140.6 14 142 Z"),
+        SKPath.ParseSvgPathData("M271 142.3 L196.4 143.2 A52.6 52.6 0 0 1 96 166.5 L73.6 158.7 A71.6 71.6 0 0 0 206.5 181 C209.3 173.7 214.7 167.7 220 162 C225.6 158 230.8 151.7 238 151 C248.4 145.8 259.6 144.7 271 142.3 Z"),
+        SKPath.ParseSvgPathData("M114 146.2 C142 145 172 143.9 202 142.9 L202 158.8 C176 154.2 146 149.6 114 146.2 Z")
+    ];
 
     private void DrawDip(SKCanvas canvas)
     {
@@ -664,18 +816,27 @@ public partial class MainPage : ContentPage
     private void OnGoldClicked(object? sender, EventArgs e) => SelectBall(BallProfile.Gold);
     private async void OnPlayAgainClicked(object? sender, EventArgs e)
     {
-        if (_completedMaze && _nextMazeFileIndex < MazeFiles.Length)
+        if (_completedMaze)
         {
-            string fileName = MazeFiles[_nextMazeFileIndex++];
+            int nextLevelNumber = _currentLevelNumber + 1;
             try
             {
-                await LoadMazeFromAppPackageAsync(fileName);
-                StatusLabel.Text = $"{_maze.Name}  •  tilt to roll";
+                await LoadLevelAsync(nextLevelNumber);
+                _currentLevelNumber = nextLevelNumber;
+                StatusLabel.Text = $"Level {_currentLevelNumber:000}: {_maze.Name}  •  tilt to roll";
+                return;
+            }
+            catch (FileNotFoundException)
+            {
+                StatusLabel.Text = "All levels complete!";
+                ContinueButton.Text = "PLAY AGAIN";
+                _currentLevelNumber = 1;
+                await LoadLevelAsync(_currentLevelNumber);
                 return;
             }
             catch (Exception ex)
             {
-                StatusLabel.Text = $"Could not load {fileName}: {ex.Message}";
+                StatusLabel.Text = $"Could not load level {nextLevelNumber:000}: {ex.Message}";
             }
         }
         ResetGame();
@@ -713,16 +874,16 @@ public partial class MainPage : ContentPage
 }
 
 internal sealed record BallProfile(
-    string Name, float Acceleration, float Drag, float Restitution, float MaxSpeed,
+    string Name, float Acceleration, float Drag, float Restitution, float MaxSpeed, float BlackHoleSusceptibility,
     SKColor Highlight, SKColor BaseColor, SKColor Shadow)
 {
-    public static BallProfile Wood { get; } = new("Wood", 760f, 2.8f, 0.28f, 650f,
+    public static BallProfile Wood { get; } = new("Wood", 760f, 2.8f, 0.28f, 650f, 1.25f,
         new SKColor(225, 169, 91), new SKColor(145, 82, 40), new SKColor(70, 36, 21));
 
-    public static BallProfile Silver { get; } = new("Silver", 920f, 1.55f, 0.52f, 850f,
+    public static BallProfile Silver { get; } = new("Silver", 920f, 1.55f, 0.52f, 850f, 0.75f,
         new SKColor(250, 253, 255), new SKColor(150, 164, 170), new SKColor(56, 65, 70));
 
-    public static BallProfile Gold { get; } = new("Gold", 700f, 0.72f, 0.38f, 950f,
+    public static BallProfile Gold { get; } = new("Gold", 700f, 0.72f, 0.38f, 950f, 0.42f,
         new SKColor(255, 240, 142), new SKColor(211, 158, 34), new SKColor(100, 64, 8));
 }
 

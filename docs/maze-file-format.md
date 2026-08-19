@@ -15,6 +15,7 @@ Maze files use UTF-8 JSON and the extension `.rollingmaze.json`. Coordinates are
     }
   ],
   "holes": [ { "x": 0.50, "y": 0.50 } ],
+  "blackHoles": [ { "x": 0.70, "y": 0.50 } ],
   "dip": { "x": 0.30, "y": 0.30 }
 }
 ```
@@ -29,8 +30,9 @@ Maze files use UTF-8 JSON and the extension `.rollingmaze.json`. Coordinates are
 | `goal` | yes | Goal-hole center. |
 | `walls` | yes | Straight wall segments. Segments may use any angle. |
 | `holes` | yes | Hazard-hole centers; use `[]` for none. |
+| `blackHoles` | no | Black-hole centers. Their gravity affects nearby balls and their event horizon captures balls. Omit or use `[]` for none. |
 | `dip` | no | Dip center; use `null` or omit it for none. |
 
 Every coordinate must be a finite number from `0` through `1`. Walls must have two different endpoints. The shared `RollingMaze.Mazes` library is the authoritative reader, writer, and validator used by both applications.
 
-The first maze remains defined in `MainPage.CreateFirstMaze()`. Later files can be bundled as MAUI raw assets and loaded with `LoadMazeFromAppPackageAsync`, or parsed with `MazeFile.Load`/`MazeFile.Parse` when obtained from another source.
+Game levels are bundled under `RollingMaze/Resources/Raw/levels` and named sequentially as `level001.rollingmaze.json`, `level002.rollingmaze.json`, and so on. The game loads level 001 at startup and advances to the next numbered file after each completed maze. Files can be created and edited with MazeDesigner.

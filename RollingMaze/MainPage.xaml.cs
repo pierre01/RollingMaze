@@ -53,7 +53,7 @@ public partial class MainPage : ContentPage
     private const float BlackHoleGravity = 2200f;
     private const float DipRadius = 52f;
     private const float DipJumpSpeed = 360f;
-    private const float PhoneTiltSensitivity = 1.4f;
+    private const float PhoneTiltSensitivity = 1.65f;
 
     /// <summary>
     /// Global rolling-surface resistance. Values near 0.15 feel very slick,
@@ -877,13 +877,16 @@ internal sealed record BallProfile(
     string Name, float Acceleration, float Drag, float Restitution, float MaxSpeed, float BlackHoleSusceptibility,
     SKColor Highlight, SKColor BaseColor, SKColor Shadow)
 {
-    public static BallProfile Wood { get; } = new("Wood", 760f, 2.8f, 0.28f, 650f, 1.25f,
+    // Higher acceleration makes short, quick tilts register immediately. The
+    // increased drag sheds old momentum sooner while retaining the material
+    // progression: wood grips most, silver is balanced, and gold carries furthest.
+    public static BallProfile Wood { get; } = new("Wood", 1080f, 7.0f, 0.28f, 650f, 1.25f,
         new SKColor(225, 169, 91), new SKColor(145, 82, 40), new SKColor(70, 36, 21));
 
-    public static BallProfile Silver { get; } = new("Silver", 920f, 1.55f, 0.52f, 850f, 0.75f,
+    public static BallProfile Silver { get; } = new("Silver", 1280f, 4.0f, 0.52f, 850f, 0.75f,
         new SKColor(250, 253, 255), new SKColor(150, 164, 170), new SKColor(56, 65, 70));
 
-    public static BallProfile Gold { get; } = new("Gold", 700f, 0.72f, 0.38f, 950f, 0.42f,
+    public static BallProfile Gold { get; } = new("Gold", 980f, 2.2f, 0.38f, 950f, 0.42f,
         new SKColor(255, 240, 142), new SKColor(211, 158, 34), new SKColor(100, 64, 8));
 }
 

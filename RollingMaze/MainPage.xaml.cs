@@ -37,8 +37,13 @@ public partial class MainPage : ContentPage
     private int _currentLevelNumber = 1;
     private bool _initialLevelLoaded;
     private bool _completedMaze;
+    private bool _gameOver;
+    private int _lives = StartingLives;
+    private int _totalScore;
 
     private const string LevelsFolder = "levels";
+    private const int StartingLives = 3;
+    private const double LevelTimeLimitSeconds = 120d;
 
     private const float BallRadius = 24f;
     private const float WallInset = 24f;
@@ -53,7 +58,9 @@ public partial class MainPage : ContentPage
     private const float BlackHoleGravity = 2200f;
     private const float DipRadius = 52f;
     private const float DipJumpSpeed = 360f;
-    private const float PhoneTiltSensitivity = 1.65f;
+    // Amplify both accelerometer axes so short platform movements immediately
+    // translate into stronger forward/back and left/right ball acceleration.
+    private const float PhoneTiltSensitivity = 2.25f;
 
     /// <summary>
     /// Global rolling-surface resistance. Values near 0.15 feel very slick,
@@ -86,6 +93,7 @@ public partial class MainPage : ContentPage
             {
                 await LoadLevelAsync(_currentLevelNumber);
                 StatusLabel.Text = $"{_maze.Name}  •  choose a ball";
+                UpdateScoreboard(LevelTimeLimitSeconds);
             }
             catch (Exception ex)
             {
@@ -191,10 +199,13 @@ public partial class MainPage : ContentPage
         _insideDip = false;
         _won = false;
         _completedMaze = false;
+        _gameOver = false;
         _startedAt = DateTime.UtcNow;
         _lastFrame = DateTime.UtcNow;
         WinOverlay.IsVisible = false;
+        ChangeBallButton.IsVisible = true;
         GenerateObstacles();
+        UpdateScoreboard(LevelTimeLimitSeconds);
         GameCanvas.InvalidateSurface();
     }
 
@@ -225,6 +236,9 @@ public partial class MainPage : ContentPage
 
         if (_ball is null || _won || _boardSize.Width <= 0 || _boardSize.Height <= 0)
             return;
+
+        double remainingSeconds = GetRemainingSeconds(now);
+        UpdateScoreboard(remainingSeconds);
 
         if (_falling)
         {
@@ -460,9 +474,17 @@ public partial class MainPage : ContentPage
         _completedMaze = true;
         _velocity = SKPoint.Empty;
         double seconds = (DateTime.UtcNow - _startedAt).TotalSeconds;
+        int remainingSeconds = (int)Math.Ceiling(GetRemainingSeconds(DateTime.UtcNow));
+        int score = remainingSeconds * _ball!.ScoreValue * 100;
+        _totalScore += score;
+        int previousBest = GetBestScore();
+        int bestScore = Math.Max(previousBest, score);
+        if (bestScore != previousBest)
+            Preferences.Default.Set(GetBestScoreKey(), bestScore);
+        UpdateScoreboard(remainingSeconds);
         ResultTitleLabel.Text = "GOAL!";
         ResultTitleLabel.TextColor = Color.FromArgb("#F2CF55");
-        WinDetailLabel.Text = $"{_ball!.Name} ball • {seconds:0.0} seconds";
+        WinDetailLabel.Text = $"{_ball.Name} {_ball.ScoreValue}× • {seconds:0.0}s • +{score:N0}\nTotal: {_totalScore:N0}  •  Best: {bestScore:N0}";
         ContinueButton.Text = "NEXT LEVEL";
         WinOverlay.IsVisible = true;
     }
@@ -504,14 +526,46 @@ public partial class MainPage : ContentPage
             return;
 
         _falling = false;
-        _won = true;
-        _completedMaze = false;
-        ResultTitleLabel.Text = "LOST!";
-        ResultTitleLabel.TextColor = Color.FromArgb("#E76D5B");
-        WinDetailLabel.Text = _fallingIntoBlackHole
+        string reason = _fallingIntoBlackHole
             ? "Your ball crossed the event horizon."
             : "Your ball fell into a hole.";
-        ContinueButton.Text = "TRY AGAIN";
+        CompleteFailure(reason);
+    }
+
+    private double GetRemainingSeconds(DateTime now) =>
+        Math.Max(0d, LevelTimeLimitSeconds - (now - _startedAt).TotalSeconds);
+
+    private string GetBestScoreKey() => $"level_{_currentLevelNumber:000}_best_score";
+
+    private int GetBestScore() => Preferences.Default.Get(GetBestScoreKey(), 0);
+
+    private void UpdateScoreboard(double remainingSeconds)
+    {
+        TimerLabel.Text = $"TIME {Math.Max(0, (int)Math.Ceiling(remainingSeconds))}";
+        LivesLabel.Text = $"LIVES {new string('♥', _lives)}{new string('♡', StartingLives - _lives)}";
+        ScoreLabel.Text = $"SCORE {_totalScore:N0}";
+        BestScoreLabel.Text = $"BEST {GetBestScore():N0}";
+    }
+
+    private void CompleteFailure(string reason)
+    {
+        if (_won)
+            return;
+
+        _won = true;
+        _completedMaze = false;
+        _velocity = SKPoint.Empty;
+        _lives = Math.Max(0, _lives - 1);
+        _gameOver = _lives == 0;
+        UpdateScoreboard(GetRemainingSeconds(DateTime.UtcNow));
+
+        ResultTitleLabel.Text = _gameOver ? "GAME OVER" : "LOST!";
+        ResultTitleLabel.TextColor = Color.FromArgb("#E76D5B");
+        WinDetailLabel.Text = _gameOver
+            ? $"{reason}\nFinal score: {_totalScore:N0}\nNo lives left — return to level 001."
+            : $"{reason}\n{_lives} {( _lives == 1 ? "life" : "lives")} remaining.";
+        ContinueButton.Text = _gameOver ? "START OVER" : "TRY AGAIN";
+        ChangeBallButton.IsVisible = !_gameOver;
         WinOverlay.IsVisible = true;
     }
 
@@ -816,6 +870,16 @@ public partial class MainPage : ContentPage
     private void OnGoldClicked(object? sender, EventArgs e) => SelectBall(BallProfile.Gold);
     private async void OnPlayAgainClicked(object? sender, EventArgs e)
     {
+        if (_gameOver)
+        {
+            _lives = StartingLives;
+            _totalScore = 0;
+            _currentLevelNumber = 1;
+            await LoadLevelAsync(_currentLevelNumber);
+            StatusLabel.Text = $"Level {_currentLevelNumber:000}: {_maze.Name}  •  tilt to roll";
+            return;
+        }
+
         if (_completedMaze)
         {
             int nextLevelNumber = _currentLevelNumber + 1;
@@ -823,6 +887,7 @@ public partial class MainPage : ContentPage
             {
                 await LoadLevelAsync(nextLevelNumber);
                 _currentLevelNumber = nextLevelNumber;
+                UpdateScoreboard(LevelTimeLimitSeconds);
                 StatusLabel.Text = $"Level {_currentLevelNumber:000}: {_maze.Name}  •  tilt to roll";
                 return;
             }
@@ -830,6 +895,7 @@ public partial class MainPage : ContentPage
             {
                 StatusLabel.Text = "All levels complete!";
                 ContinueButton.Text = "PLAY AGAIN";
+                _totalScore = 0;
                 _currentLevelNumber = 1;
                 await LoadLevelAsync(_currentLevelNumber);
                 return;
@@ -874,19 +940,19 @@ public partial class MainPage : ContentPage
 }
 
 internal sealed record BallProfile(
-    string Name, float Acceleration, float Drag, float Restitution, float MaxSpeed, float BlackHoleSusceptibility,
+    string Name, int ScoreValue, float Acceleration, float Drag, float Restitution, float MaxSpeed, float BlackHoleSusceptibility,
     SKColor Highlight, SKColor BaseColor, SKColor Shadow)
 {
     // Higher acceleration makes short, quick tilts register immediately. The
     // increased drag sheds old momentum sooner while retaining the material
     // progression: wood grips most, silver is balanced, and gold carries furthest.
-    public static BallProfile Wood { get; } = new("Wood", 1080f, 7.0f, 0.28f, 650f, 1.25f,
+    public static BallProfile Wood { get; } = new("Wood", 1, 1080f, 7.0f, 0.28f, 650f, 1.25f,
         new SKColor(225, 169, 91), new SKColor(145, 82, 40), new SKColor(70, 36, 21));
 
-    public static BallProfile Silver { get; } = new("Silver", 1280f, 4.0f, 0.52f, 850f, 0.75f,
+    public static BallProfile Silver { get; } = new("Silver", 2, 1280f, 4.0f, 0.52f, 850f, 0.75f,
         new SKColor(250, 253, 255), new SKColor(150, 164, 170), new SKColor(56, 65, 70));
 
-    public static BallProfile Gold { get; } = new("Gold", 980f, 2.2f, 0.38f, 950f, 0.42f,
+    public static BallProfile Gold { get; } = new("Gold", 3, 980f, 2.2f, 0.38f, 950f, 0.42f,
         new SKColor(255, 240, 142), new SKColor(211, 158, 34), new SKColor(100, 64, 8));
 }
 

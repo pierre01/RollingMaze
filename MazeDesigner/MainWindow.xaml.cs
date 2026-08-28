@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private MazePoint? _selectedPoint;
     private DragKind _selectedKind;
     private Line? _preview;
+    private ClipboardItem? _clipboardItem;
     private string? _path;
     private bool _dirty;
 
@@ -36,6 +37,19 @@ public partial class MainWindow : Window
     private void Tool_Checked(object sender, RoutedEventArgs e)
     {
         if (sender is RadioButton { Tag: string tag } && Enum.TryParse(tag, out Tool tool)) _tool = tool;
+    }
+
+    private void ToolMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string tag } && Enum.TryParse(tag, out Tool tool))
+        {
+            _tool = tool;
+            if (tool == Tool.Wall) WallToolButton.IsChecked = true;
+            else if (tool == Tool.Hole) HoleToolButton.IsChecked = true;
+            else if (tool == Tool.BlackHole) BlackHoleToolButton.IsChecked = true;
+            else if (tool == Tool.Dip) DipToolButton.IsChecked = true;
+            StatusText.Text = $"{((MenuItem)sender).Header}".Replace("_", "");
+        }
     }
 
     private void Board_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -66,6 +80,7 @@ public partial class MainWindow : Window
             SetDirty();
             Render();
             Board.ReleaseMouseCapture();
+            SelectTool();
             return;
         }
 
@@ -147,6 +162,7 @@ public partial class MainWindow : Window
             {
                 _maze.Walls.Add(new(Normalize(_dragStart), Normalize(end)));
                 SetDirty();
+                SelectTool();
             }
         }
         _dragKind = DragKind.None;
@@ -201,7 +217,7 @@ public partial class MainWindow : Window
         return null;
     }
 
-    private void Delete_Click(object sender, RoutedEventArgs e)
+    private void DeleteSelection()
     {
         if (_selectedWall is not null) _maze.Walls.Remove(_selectedWall);
         else if (_selectedPoint is not null && _selectedKind == DragKind.Hole) _maze.Holes.Remove(_selectedPoint);
@@ -211,10 +227,68 @@ public partial class MainWindow : Window
         _selectedWall = null; _selectedPoint = null; _selectedKind = DragKind.None; SetDirty(); Render();
     }
 
+    private void SelectTool()
+    {
+        _tool = Tool.Select;
+        SelectToolButton.IsChecked = true;
+        StatusText.Text = "Select / Move";
+    }
+
+    private void Selection_CanExecute(object sender, CanExecuteRoutedEventArgs e) =>
+        e.CanExecute = _selectedWall is not null ||
+            (_selectedPoint is not null && _selectedKind is DragKind.Hole or DragKind.BlackHole or DragKind.Dip);
+
+    private void Paste_CanExecute(object sender, CanExecuteRoutedEventArgs e) => e.CanExecute = _clipboardItem is not null;
+
+    private void Copy_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (_selectedWall is not null)
+            _clipboardItem = new ClipboardItem(DragKind.Wall, _selectedWall.Start, _selectedWall.End);
+        else if (_selectedPoint is not null)
+            _clipboardItem = new ClipboardItem(_selectedKind, _selectedPoint, null);
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void Cut_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        Copy_Executed(sender, e);
+        DeleteSelection();
+    }
+
+    private void Paste_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (_clipboardItem is null) return;
+        MazePoint Offset(MazePoint p) => new(Math.Clamp(p.X + 0.02, 0, 1), Math.Clamp(p.Y + 0.02, 0, 1));
+
+        _selectedWall = null;
+        _selectedPoint = null;
+        _selectedKind = _clipboardItem.Kind;
+        if (_clipboardItem.Kind == DragKind.Wall && _clipboardItem.End is not null)
+        {
+            _selectedWall = new(Offset(_clipboardItem.Start), Offset(_clipboardItem.End));
+            _maze.Walls.Add(_selectedWall);
+            _clipboardItem = new ClipboardItem(DragKind.Wall, _selectedWall.Start, _selectedWall.End);
+        }
+        else
+        {
+            MazePoint point = Offset(_clipboardItem.Start);
+            if (_clipboardItem.Kind == DragKind.Hole) _maze.Holes.Add(point);
+            else if (_clipboardItem.Kind == DragKind.BlackHole) _maze.BlackHoles.Add(point);
+            else if (_clipboardItem.Kind == DragKind.Dip) _maze.Dip = point;
+            _selectedPoint = point;
+            _clipboardItem = new ClipboardItem(_clipboardItem.Kind, point, null);
+        }
+        SetDirty();
+        SelectTool();
+        Render();
+    }
+
+    private void Delete_Executed(object sender, ExecutedRoutedEventArgs e) => DeleteSelection();
+
     private void New_Click(object sender, RoutedEventArgs e)
     {
         if (!ConfirmDiscard()) return;
-        _maze = NewMaze(); _path = null; _dirty = false; NameBox.Text = _maze.Name; Render(); UpdateTitle();
+        _maze = NewMaze(); _path = null; _dirty = false; ClearSelection(); SelectTool(); Render(); UpdateTitle();
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)
@@ -222,11 +296,21 @@ public partial class MainWindow : Window
         if (!ConfirmDiscard()) return;
         var dialog = new OpenFileDialog { Filter = "Rolling Maze (*.rollingmaze.json)|*.rollingmaze.json|JSON (*.json)|*.json" };
         if (dialog.ShowDialog() != true) return;
-        try { _maze = MazeFile.Load(dialog.FileName); _path = dialog.FileName; _dirty = false; NameBox.Text = _maze.Name; Render(); UpdateTitle(); }
+        try
+        {
+            _maze = MazeFile.Load(dialog.FileName);
+            _maze.Name = MazeNameFromPath(dialog.FileName);
+            _path = dialog.FileName; _dirty = false; ClearSelection(); SelectTool(); Render(); UpdateTitle();
+        }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Cannot open maze", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
     private void Save_Click(object sender, RoutedEventArgs e) { if (_path is null) SaveAs_Click(sender, e); else SaveTo(_path); }
+
+    private void New_Executed(object sender, ExecutedRoutedEventArgs e) => New_Click(sender, e);
+    private void Open_Executed(object sender, ExecutedRoutedEventArgs e) => Open_Click(sender, e);
+    private void Save_Executed(object sender, ExecutedRoutedEventArgs e) => Save_Click(sender, e);
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
     private void SaveAs_Click(object sender, RoutedEventArgs e)
     {
@@ -236,17 +320,17 @@ public partial class MainWindow : Window
 
     private void SaveTo(string path)
     {
-        try { MazeFile.Save(path, _maze); _path = path; _dirty = false; StatusText.Text = $"Saved {System.IO.Path.GetFileName(path)}"; UpdateTitle(); }
+        try
+        {
+            _maze.Name = MazeNameFromPath(path);
+            MazeFile.Save(path, _maze); _path = path; _dirty = false;
+            StatusText.Text = $"Saved {System.IO.Path.GetFileName(path)}"; UpdateTitle();
+        }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Cannot save maze", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
-    private void NameBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_maze.Name == NameBox.Text) return;
-        _maze.Name = NameBox.Text; SetDirty();
-    }
-
-    private bool ConfirmDiscard() => !_dirty || MessageBox.Show(this, "Discard unsaved changes?", "Rolling Maze Designer", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    private bool ConfirmDiscard() => !_dirty || new DiscardChangesDialog { Owner = this }.ShowDialog() == true;
+    private void ClearSelection() { _selectedWall = null; _selectedPoint = null; _selectedKind = DragKind.None; }
     private void SetDirty() { _dirty = true; StatusText.Text = "Unsaved changes"; UpdateTitle(); }
     private void UpdateTitle() => Title = $"Rolling Maze Designer — {_maze.Name}{(_dirty ? " *" : "")}";
     private void Board_SizeChanged(object sender, SizeChangedEventArgs e) => Render();
@@ -254,5 +338,13 @@ public partial class MainWindow : Window
     private MazePoint Normalize(Point p) => new(p.X / Board.ActualWidth, p.Y / Board.ActualHeight);
     private Point ToPoint(MazePoint p) => new(p.X * Board.ActualWidth, p.Y * Board.ActualHeight);
     private static string SafeName(string name) => string.Concat(name.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+    private static string MazeNameFromPath(string path)
+    {
+        string fileName = System.IO.Path.GetFileName(path);
+        return fileName.EndsWith(MazeFile.Extension, StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^MazeFile.Extension.Length]
+            : System.IO.Path.GetFileNameWithoutExtension(fileName);
+    }
     private sealed record EditorTag(DragKind Kind, MazeWallDefinition? Wall, MazePoint? Point);
+    private sealed record ClipboardItem(DragKind Kind, MazePoint Start, MazePoint? End);
 }

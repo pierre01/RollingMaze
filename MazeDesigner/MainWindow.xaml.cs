@@ -1,17 +1,20 @@
 using Microsoft.Win32;
 using RollingMaze.Mazes;
+using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using IOPath = System.IO.Path;
 
 namespace MazeDesigner;
 
 public partial class MainWindow : Window
 {
     private enum Tool { Select, Wall, Start, Goal, Hole, BlackHole, Dip }
-    private enum DragKind { None, NewWall, Wall, Start, Goal, Hole, BlackHole, Dip }
+    private enum DragKind { None, NewWall, Wall, WallStart, WallEnd, Start, Goal, Hole, BlackHole, Dip }
 
     private MazeDefinition _maze = NewMaze();
     private Tool _tool;
@@ -24,10 +27,15 @@ public partial class MainWindow : Window
     private ClipboardItem? _clipboardItem;
     private string? _path;
     private bool _dirty;
+    private readonly List<string> _recentFiles = [];
+    private readonly List<string> _recentFolders = [];
+    private static readonly string RecentItemsPath = IOPath.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RollingMazeDesigner", "recent-items.json");
 
     public MainWindow()
     {
         InitializeComponent();
+        LoadRecentItems();
         Loaded += (_, _) => Render();
         Closing += (_, e) => { if (!ConfirmDiscard()) e.Cancel = true; };
     }
@@ -126,6 +134,15 @@ public partial class MainWindow : Window
                 Normalize(Clamp(ToPoint(_selectedWall.Start) + new Vector(dx, dy))),
                 Normalize(Clamp(ToPoint(_selectedWall.End) + new Vector(dx, dy))));
         }
+        else if (_dragKind is DragKind.WallStart or DragKind.WallEnd && _selectedWall is not null)
+        {
+            MazePoint endpoint = Normalize(p);
+            int index = _maze.Walls.IndexOf(_selectedWall);
+            _selectedWall = _dragKind == DragKind.WallStart
+                ? new MazeWallDefinition(endpoint, _selectedWall.End)
+                : new MazeWallDefinition(_selectedWall.Start, endpoint);
+            _maze.Walls[index] = _selectedWall;
+        }
         else if (_selectedPoint is not null)
         {
             MazePoint moved = Normalize(p);
@@ -179,7 +196,13 @@ public partial class MainWindow : Window
         {
             Line line = MakeWall(ToPoint(wall.Start), ToPoint(wall.End), wall == _selectedWall);
             line.Tag = new EditorTag(DragKind.Wall, wall, null);
+            line.Cursor = Cursors.SizeAll;
             Board.Children.Add(line);
+        }
+        if (_selectedWall is not null)
+        {
+            AddWallHandle(_selectedWall.Start, DragKind.WallStart);
+            AddWallHandle(_selectedWall.End, DragKind.WallEnd);
         }
         AddMarker(_maze.Start, DragKind.Start, Brushes.DodgerBlue, "S", 18);
         AddMarker(_maze.Goal, DragKind.Goal, Brushes.Gold, "G", 24);
@@ -193,6 +216,26 @@ public partial class MainWindow : Window
         X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Stroke = selected ? Brushes.Gold : new SolidColorBrush(Color.FromRgb(135, 95, 50)),
         StrokeThickness = selected ? 13 : 11, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round
     };
+
+    private void AddWallHandle(MazePoint endpoint, DragKind kind)
+    {
+        const double size = 14;
+        Point p = ToPoint(endpoint);
+        var handle = new Ellipse
+        {
+            Width = size,
+            Height = size,
+            Fill = Brushes.White,
+            Stroke = Brushes.Goldenrod,
+            StrokeThickness = 3,
+            Cursor = Cursors.Cross,
+            Tag = new EditorTag(kind, _selectedWall, null)
+        };
+        Canvas.SetLeft(handle, p.X - size / 2);
+        Canvas.SetTop(handle, p.Y - size / 2);
+        Panel.SetZIndex(handle, 4);
+        Board.Children.Add(handle);
+    }
 
     private void AddMarker(MazePoint point, DragKind kind, Brush fill, string text, double radius)
     {
@@ -296,13 +339,49 @@ public partial class MainWindow : Window
         if (!ConfirmDiscard()) return;
         var dialog = new OpenFileDialog { Filter = "Rolling Maze (*.rollingmaze.json)|*.rollingmaze.json|JSON (*.json)|*.json" };
         if (dialog.ShowDialog() != true) return;
+        OpenMaze(dialog.FileName);
+    }
+
+    private void OpenMaze(string path)
+    {
         try
         {
-            _maze = MazeFile.Load(dialog.FileName);
-            _maze.Name = MazeNameFromPath(dialog.FileName);
-            _path = dialog.FileName; _dirty = false; ClearSelection(); SelectTool(); Render(); UpdateTitle();
+            _maze = MazeFile.Load(path);
+            _maze.Name = MazeNameFromPath(path);
+            _path = path; _dirty = false; ClearSelection(); SelectTool(); Render(); UpdateTitle();
+            AddRecentPath(path);
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Cannot open maze", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+
+    private void RecentFile_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string path }) return;
+        if (!File.Exists(path))
+        {
+            _recentFiles.Remove(path); SaveRecentItems(); RefreshRecentMenus();
+            MessageBox.Show(this, "This file no longer exists.", "Recent file", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (ConfirmDiscard()) OpenMaze(path);
+    }
+
+    private void RecentFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string folder }) return;
+        if (!Directory.Exists(folder))
+        {
+            _recentFolders.Remove(folder); SaveRecentItems(); RefreshRecentMenus();
+            MessageBox.Show(this, "This folder no longer exists.", "Recent folder", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (!ConfirmDiscard()) return;
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Rolling Maze (*.rollingmaze.json)|*.rollingmaze.json|JSON (*.json)|*.json",
+            InitialDirectory = folder
+        };
+        if (dialog.ShowDialog() == true) OpenMaze(dialog.FileName);
     }
 
     private void Save_Click(object sender, RoutedEventArgs e) { if (_path is null) SaveAs_Click(sender, e); else SaveTo(_path); }
@@ -325,6 +404,7 @@ public partial class MainWindow : Window
             _maze.Name = MazeNameFromPath(path);
             MazeFile.Save(path, _maze); _path = path; _dirty = false;
             StatusText.Text = $"Saved {System.IO.Path.GetFileName(path)}"; UpdateTitle();
+            AddRecentPath(path);
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Cannot save maze", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
@@ -345,6 +425,70 @@ public partial class MainWindow : Window
             ? fileName[..^MazeFile.Extension.Length]
             : System.IO.Path.GetFileNameWithoutExtension(fileName);
     }
+
+    private void AddRecentPath(string path)
+    {
+        path = IOPath.GetFullPath(path);
+        AddMostRecent(_recentFiles, path);
+        string? folder = IOPath.GetDirectoryName(path);
+        if (folder is not null) AddMostRecent(_recentFolders, folder);
+        SaveRecentItems();
+        RefreshRecentMenus();
+    }
+
+    private static void AddMostRecent(List<string> items, string value)
+    {
+        items.RemoveAll(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase));
+        items.Insert(0, value);
+        if (items.Count > 10) items.RemoveRange(10, items.Count - 10);
+    }
+
+    private void LoadRecentItems()
+    {
+        try
+        {
+            if (File.Exists(RecentItemsPath))
+            {
+                RecentItems? items = JsonSerializer.Deserialize<RecentItems>(File.ReadAllText(RecentItemsPath));
+                if (items is not null)
+                {
+                    _recentFiles.AddRange(items.Files.Take(10));
+                    _recentFolders.AddRange(items.Folders.Take(10));
+                }
+            }
+        }
+        catch { /* A damaged history must not prevent the designer from starting. */ }
+        RefreshRecentMenus();
+    }
+
+    private void SaveRecentItems()
+    {
+        try
+        {
+            Directory.CreateDirectory(IOPath.GetDirectoryName(RecentItemsPath)!);
+            File.WriteAllText(RecentItemsPath, JsonSerializer.Serialize(new RecentItems(_recentFiles, _recentFolders)));
+        }
+        catch { /* Recent history is optional. */ }
+    }
+
+    private void RefreshRecentMenus()
+    {
+        PopulateRecentMenu(RecentFilesMenu, _recentFiles, RecentFile_Click, IOPath.GetFileName);
+        PopulateRecentMenu(RecentFoldersMenu, _recentFolders, RecentFolder_Click, path => path);
+    }
+
+    private static void PopulateRecentMenu(MenuItem menu, IEnumerable<string> paths, RoutedEventHandler handler, Func<string, string> header)
+    {
+        menu.Items.Clear();
+        foreach (string path in paths)
+        {
+            var item = new MenuItem { Header = header(path), ToolTip = path, Tag = path };
+            item.Click += handler;
+            menu.Items.Add(item);
+        }
+        if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = "(Empty)", IsEnabled = false });
+    }
     private sealed record EditorTag(DragKind Kind, MazeWallDefinition? Wall, MazePoint? Point);
     private sealed record ClipboardItem(DragKind Kind, MazePoint Start, MazePoint? End);
+    private sealed record RecentItems(List<string> Files, List<string> Folders);
 }

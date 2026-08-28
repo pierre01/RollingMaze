@@ -65,6 +65,8 @@
       <MenuItem Header="_File">
         <MenuItem Header="_New" Command="ApplicationCommands.New" InputGestureText="Ctrl+N" />
         <MenuItem Header="_Open…" Command="ApplicationCommands.Open" InputGestureText="Ctrl+O" />
+        <MenuItem x:Name="RecentFilesMenu" Header="Recent _Files" />
+        <MenuItem x:Name="RecentFoldersMenu" Header="Recent F_olders" />
         <Separator />
         <MenuItem Header="_Save" Command="ApplicationCommands.Save" InputGestureText="Ctrl+S" />
         <MenuItem Header="Save _As…" Click="SaveAs_Click" />
@@ -88,6 +90,10 @@
 
     <ToolBarTray DockPanel.Dock="Top" Background="#E9E9E9">
       <ToolBar>
+        <Button Command="ApplicationCommands.Save" ToolTip="Save (Ctrl+S)">
+          <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Save" /></StackPanel>
+        </Button>
+        <Separator />
         <RadioButton x:Name="SelectToolButton" GroupName="Tools" Tag="Select" IsChecked="True"
                      Checked="Tool_Checked" Padding="8,3" VerticalContentAlignment="Center" ToolTip="Select or move an item">
           <StackPanel Orientation="Horizontal"><Image Source="{StaticResource SelectIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Select / Move" /></StackPanel>

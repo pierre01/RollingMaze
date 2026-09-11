@@ -34,7 +34,8 @@ public partial class MainPage : ContentPage
     private DateTime _lastKnockAt = DateTime.MinValue;
     private MazeDefinition _maze = CreateFirstMaze();
     private bool _usesDesignedObstacles;
-    private int _currentLevelNumber = 1;
+    private int _currentLevelIndex;
+    private int _currentLevelNumber = LevelOrder.GetLevelNumber(0);
     private bool _initialLevelLoaded;
     private bool _completedMaze;
     private bool _gameOver;
@@ -874,7 +875,8 @@ public partial class MainPage : ContentPage
         {
             _lives = StartingLives;
             _totalScore = 0;
-            _currentLevelNumber = 1;
+            _currentLevelIndex = 0;
+            _currentLevelNumber = LevelOrder.GetLevelNumber(_currentLevelIndex);
             await LoadLevelAsync(_currentLevelNumber);
             StatusLabel.Text = $"Level {_currentLevelNumber:000}: {_maze.Name}  •  tilt to roll";
             return;
@@ -882,10 +884,11 @@ public partial class MainPage : ContentPage
 
         if (_completedMaze)
         {
-            int nextLevelNumber = _currentLevelNumber + 1;
+            int nextLevelNumber = LevelOrder.GetLevelNumber(_currentLevelIndex + 1);
             try
             {
                 await LoadLevelAsync(nextLevelNumber);
+                _currentLevelIndex++;
                 _currentLevelNumber = nextLevelNumber;
                 UpdateScoreboard(LevelTimeLimitSeconds);
                 StatusLabel.Text = $"Level {_currentLevelNumber:000}: {_maze.Name}  •  tilt to roll";
@@ -896,7 +899,8 @@ public partial class MainPage : ContentPage
                 StatusLabel.Text = "All levels complete!";
                 ContinueButton.Text = "PLAY AGAIN";
                 _totalScore = 0;
-                _currentLevelNumber = 1;
+                _currentLevelIndex = 0;
+                _currentLevelNumber = LevelOrder.GetLevelNumber(_currentLevelIndex);
                 await LoadLevelAsync(_currentLevelNumber);
                 return;
             }

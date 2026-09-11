@@ -65,6 +65,8 @@
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
 
+	<Import Project="DebugMaze.targets" />
+
 	<ItemGroup>
 		<ProjectReference Include="..\RollingMaze.Mazes\RollingMaze.Mazes.csproj" />
 	</ItemGroup>

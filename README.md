@@ -12,6 +12,8 @@ Work Balls with different physics work.
 
 ## Maze files and designer
 
+Debug builds start with the most recently modified `Resources/Raw/levels/level*.rollingmaze.json` source file, then play the remaining levels in numeric order. Rebuild after editing a maze to update the starting level. Release builds always start at level 001 and follow numeric order.
+
 `RollingMaze.Mazes` contains the shared, versioned maze format. The first maze is still hardcoded; later mazes can be loaded from independent `.rollingmaze.json` files. See [the file-format specification](docs/maze-file-format.md) and the bundled `maze2.rollingmaze.json` example.
 
 `MazeDesigner` is a separate Windows WPF application. Run it with:

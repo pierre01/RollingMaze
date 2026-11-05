@@ -54,7 +54,7 @@
                 <Label Text="ROLLING MAZE" TextColor="#F3E8C9" FontSize="34" FontAttributes="Bold" HorizontalTextAlignment="Center" />
                 <Label Text="Choose your ball" TextColor="#AAB9AE" FontSize="18" HorizontalTextAlignment="Center" />
 
-                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10" Margin="0,12,0,0">
+                <Grid x:Name="BallChoices" ColumnDefinitions="*,*,*" ColumnSpacing="10" Margin="0,12,0,0">
                     <Button Grid.Column="0" Text="🟤&#10;WOOD" StyleClass="BallChoice" Clicked="OnWoodClicked" />
                     <Button Grid.Column="1" Text="⚪&#10;SILVER" StyleClass="BallChoice" Clicked="OnSilverClicked" />
                     <Button Grid.Column="2" Text="🟡&#10;GOLD" StyleClass="BallChoice" Clicked="OnGoldClicked" />
@@ -64,6 +64,10 @@
                        TextColor="#819087" FontSize="11" HorizontalTextAlignment="Center" />
                 <Label Text="Tilt to roll and knock behind the device to bounce. On desktop, drag anywhere to tilt."
                        TextColor="#C3CEC7" FontSize="13" HorizontalTextAlignment="Center" Margin="0,8,0,0" />
+                <Button x:Name="CalibrateTiltButton" Text="Calibrate tilt" Clicked="OnCalibrateTiltClicked"
+                        BackgroundColor="#D8B949" TextColor="#101713" CornerRadius="18" />
+                <Label x:Name="CalibrationStatusLabel" Text="Lay the phone flat, then calibrate. Keep it still until finished."
+                       TextColor="#C3CEC7" FontSize="13" HorizontalTextAlignment="Center" />
             </VerticalStackLayout>
         </Grid>
 

@@ -73,6 +73,9 @@ public partial class MainPage : ContentPage
     public MainPage()
     {
         InitializeComponent();
+#if DEBUG
+        InitializeTiltDiagnostics();
+#endif
         _gameTimer = Dispatcher.CreateTimer();
         _gameTimer.Interval = TimeSpan.FromMilliseconds(16);
         _gameTimer.Tick += OnGameTick;
@@ -109,6 +112,7 @@ public partial class MainPage : ContentPage
 
     protected override void OnDisappearing()
     {
+        _calibrationCancellation?.Cancel();
         _gameTimer.Stop();
         DeviceDisplay.Current.MainDisplayInfoChanged -= OnMainDisplayInfoChanged;
         if (Accelerometer.Default.IsMonitoring)
@@ -146,6 +150,10 @@ public partial class MainPage : ContentPage
         double y = e.Reading.Acceleration.Y;
         double z = e.Reading.Acceleration.Z;
 
+        // Bounce detection must continue to use the original acceleration magnitude.
+        float magnitude = (float)Math.Sqrt((x * x) + (y * y) + (z * z));
+        (x, y) = _tiltCalibration.Process(x, y, z);
+
         // Sensor axes are fixed to the device's natural orientation; they do not
         // follow the active display. Remap them so screen-left/up mean the same
         // thing on cover and inner displays, including when the app starts unfolded.
@@ -166,12 +174,11 @@ public partial class MainPage : ContentPage
 
         // A knock behind the screen creates a brief acceleration spike. Compare
         // consecutive total-force readings so ordinary steady tilting is ignored.
-        float magnitude = (float)Math.Sqrt((x * x) + (y * y) + (z * z));
         float impulse = MathF.Abs(magnitude - _lastAccelerationMagnitude);
         _lastAccelerationMagnitude = magnitude;
 
         DateTime now = DateTime.UtcNow;
-        if (impulse >= 0.65f && (now - _lastKnockAt).TotalMilliseconds >= 550)
+        if (!_isCalibrating && impulse >= 0.65f && (now - _lastKnockAt).TotalMilliseconds >= 550)
         {
             _lastKnockAt = now;
             MainThread.BeginInvokeOnMainThread(BounceBall);
@@ -235,7 +242,7 @@ public partial class MainPage : ContentPage
         float dt = Math.Clamp((float)(now - _lastFrame).TotalSeconds, 0f, 0.033f);
         _lastFrame = now;
 
-        if (_ball is null || _won || _boardSize.Width <= 0 || _boardSize.Height <= 0)
+        if (_isCalibrating || _ball is null || _won || _boardSize.Width <= 0 || _boardSize.Height <= 0)
             return;
 
         double remainingSeconds = GetRemainingSeconds(now);
@@ -250,15 +257,25 @@ public partial class MainPage : ContentPage
 
         // Profiles alter how strongly tilt accelerates the ball, how quickly it
         // loses speed, and how much energy remains after touching a wall.
-        _velocity.X += _tilt.X * _ball.Acceleration * dt;
-        _velocity.Y += _tilt.Y * _ball.Acceleration * dt;
+        SKPoint tilt = _tilt;
+        _velocity.X += tilt.X * _ball.Acceleration * dt;
+        _velocity.Y += tilt.Y * _ball.Acceleration * dt;
         float drag = MathF.Exp(-_ball.Drag * Math.Max(0f, SurfaceFriction) * dt);
         _velocity.X *= drag;
         _velocity.Y *= drag;
 
         UpdateBounce(dt);
+#if DEBUG
+        float velocityBeforeMaze = _velocity.Y;
+        if (!_ignoreMazePull)
+        {
+#endif
         ApplyDipPhysics(dt);
         ApplyBlackHolePhysics(dt);
+#if DEBUG
+        }
+        UpdateTiltDiagnostics(now, tilt.Y, dt > 0f ? (_velocity.Y - velocityBeforeMaze) / dt : 0f, dt);
+#endif
 
         if (_falling)
         {

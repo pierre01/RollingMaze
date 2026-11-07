@@ -653,7 +653,12 @@ public partial class MainPage : ContentPage
         _boardScale = (float)viewport.Scale;
         _boardOffset = new SKPoint((float)viewport.Left, (float)viewport.Top);
         canvas.Clear(new SKColor(16, 23, 19));
-        if (_boardScale <= 0) return;
+        if (_boardScale <= 0)
+        {
+            GoalFlag.IsVisible = false;
+            return;
+        }
+        UpdateGoalFlag(e.Info.Width, e.Info.Height);
         canvas.Save();
         canvas.Translate(_boardOffset.X, _boardOffset.Y);
         canvas.Scale(_boardScale);
@@ -727,6 +732,23 @@ public partial class MainPage : ContentPage
         using var hole = new SKPaint { Color = new SKColor(1, 5, 3), IsAntialias = true };
         canvas.DrawCircle(goal.X + 3, goal.Y + 5, GoalRadius + MazeVisuals.GoalRimGrowth, rim);
         canvas.DrawCircle(goal, GoalRadius, hole);
+    }
+
+    private void UpdateGoalFlag(int pixelWidth, int pixelHeight)
+    {
+        // The native image uses device-independent units; Skia paints in surface pixels.
+        // Apply the same centered board transform, then convert to the layout's units.
+        SKPoint goal = GetGoalCenter();
+        double unitsX = GameCanvas.Width / pixelWidth;
+        double unitsY = GameCanvas.Height / pixelHeight;
+        double size = GoalRadius * 1.6 * _boardScale;
+        var bounds = new Rect(
+            (_boardOffset.X + goal.X * _boardScale - size / 2) * unitsX,
+            (_boardOffset.Y + goal.Y * _boardScale - size / 2) * unitsY,
+            size * unitsX, size * unitsY);
+        if (AbsoluteLayout.GetLayoutBounds(GoalFlag) != bounds)
+            AbsoluteLayout.SetLayoutBounds(GoalFlag, bounds);
+        GoalFlag.IsVisible = true;
     }
 
     private void DrawHazardHoles(SKCanvas canvas)

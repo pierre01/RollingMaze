@@ -22,10 +22,17 @@
                 </FlexLayout>
             </VerticalStackLayout>
 
-            <skia:SKCanvasView x:Name="GameCanvas" Grid.Row="1"
+            <AbsoluteLayout Grid.Row="1">
+                <skia:SKCanvasView x:Name="GameCanvas"
+                               AbsoluteLayout.LayoutBounds="0,0,1,1"
+                               AbsoluteLayout.LayoutFlags="All"
                                PaintSurface="OnPaintSurface"
                                EnableTouchEvents="True"
                                Touch="OnCanvasTouch" />
+                <Image x:Name="GoalFlag" Source="flag_checkered.png"
+                       Aspect="AspectFit" InputTransparent="True" IsVisible="False"
+                       SemanticProperties.Description="Goal" />
+            </AbsoluteLayout>
 
             <VerticalStackLayout x:Name="FooterPanel" Grid.Row="2" Padding="12,6" Spacing="4">
                 <Label Text="KNOCK BEHIND DEVICE TO BOUNCE"

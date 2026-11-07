@@ -38,6 +38,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // WPF Width/Height require doubles; x:Static returns the boxed int constants.
+        MazeSurface.Width = MazeLayout.Width;
+        MazeSurface.Height = MazeLayout.Height;
         _history.Reset(_maze);
         LoadRecentItems();
         Loaded += (_, _) => Render();
@@ -284,17 +287,17 @@ public partial class MainWindow : Window
             AddWallHandle(_selectedWall.Start, DragKind.WallStart);
             AddWallHandle(_selectedWall.End, DragKind.WallEnd);
         }
-        AddMarker(_maze.Start, DragKind.Start, Brushes.DodgerBlue, "S", 18);
-        AddMarker(_maze.Goal, DragKind.Goal, Brushes.Gold, "G", 24);
-        foreach (MazePoint hole in _maze.Holes) AddMarker(hole, DragKind.Hole, Brushes.Black, "", 27);
-        foreach (MazePoint blackHole in _maze.BlackHoles) AddMarker(blackHole, DragKind.BlackHole, Brushes.Black, "BH", 42);
-        if (_maze.Dip is not null) AddMarker(_maze.Dip, DragKind.Dip, Brushes.SeaGreen, "D", 35);
+        AddMarker(_maze.Start, DragKind.Start, Brushes.DodgerBlue, "S", MazeVisuals.BallRadius);
+        AddMarker(_maze.Goal, DragKind.Goal, Brushes.Black, "G", MazeVisuals.GoalRadius);
+        foreach (MazePoint hole in _maze.Holes) AddMarker(hole, DragKind.Hole, Brushes.Black, "", MazeVisuals.HazardRadius);
+        foreach (MazePoint blackHole in _maze.BlackHoles) AddMarker(blackHole, DragKind.BlackHole, Brushes.Black, "", MazeVisuals.BlackHoleGraphicSize / 2d);
+        if (_maze.Dip is not null) AddMarker(_maze.Dip, DragKind.Dip, Brushes.SeaGreen, "D", 52);
     }
 
     private Line MakeWall(Point a, Point b, bool selected) => new()
     {
         X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Stroke = selected ? Brushes.Gold : new SolidColorBrush(Color.FromRgb(135, 95, 50)),
-        StrokeThickness = selected ? 13 : 11, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round
+        StrokeThickness = selected ? 18 : 16, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round
     };
 
     private void AddWallHandle(MazePoint endpoint, DragKind kind)
@@ -321,10 +324,66 @@ public partial class MainWindow : Window
     {
         Point p = ToPoint(point);
         var grid = new Grid { Width = radius * 2, Height = radius * 2, Tag = new EditorTag(kind, null, point) };
-        grid.Children.Add(new Ellipse { Fill = fill, Stroke = point == _selectedPoint ? Brushes.White : Brushes.Transparent, StrokeThickness = 3 });
+        if (kind is DragKind.Hole or DragKind.Goal or DragKind.BlackHole)
+            grid.Children.Add(CreateHoleVisual(kind, radius));
+        else
+            grid.Children.Add(new Ellipse { Fill = fill });
+        if (point == _selectedPoint)
+            grid.Children.Add(new Ellipse { Stroke = Brushes.White, StrokeThickness = 3, IsHitTestVisible = false });
         grid.Children.Add(new TextBlock { Text = text, Foreground = Brushes.White, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false });
         Canvas.SetLeft(grid, p.X - radius); Canvas.SetTop(grid, p.Y - radius); Panel.SetZIndex(grid, 2);
         Board.Children.Add(grid);
+    }
+
+    private static Canvas CreateHoleVisual(DragKind kind, double radius)
+    {
+        var visual = new Canvas();
+        void Circle(double r, Brush brush, double dx = 0, double dy = 0)
+        {
+            var ellipse = new Ellipse { Width = r * 2, Height = r * 2, Fill = brush };
+            Canvas.SetLeft(ellipse, radius + dx - r);
+            Canvas.SetTop(ellipse, radius + dy - r);
+            visual.Children.Add(ellipse);
+        }
+
+        if (kind == DragKind.BlackHole)
+        {
+            var influence = new Ellipse
+            {
+                Width = MazeVisuals.BlackHoleInfluenceRadius * 2,
+                Height = MazeVisuals.BlackHoleInfluenceRadius * 2,
+                Stroke = new SolidColorBrush(Color.FromArgb(28, 105, 78, 160)),
+                StrokeThickness = 2,
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(influence, radius - MazeVisuals.BlackHoleInfluenceRadius);
+            Canvas.SetTop(influence, radius - MazeVisuals.BlackHoleInfluenceRadius);
+            visual.Children.Add(influence);
+            // Use the same paths, 156-unit footprint and 64-unit horizon as the game.
+            double scale = MazeVisuals.BlackHoleGraphicSize / 288d;
+            foreach (string path in MazeVisuals.BlackHolePaths)
+                visual.Children.Add(new System.Windows.Shapes.Path
+                {
+                    Data = Geometry.Parse(path),
+                    Fill = new SolidColorBrush(Color.FromArgb(230, 232, 208, 255)),
+                    Stretch = Stretch.None,
+                    RenderTransform = new ScaleTransform(scale, scale)
+                });
+            Circle(MazeVisuals.BlackHoleRadius, Brushes.Black);
+        }
+        else if (kind == DragKind.Hole)
+        {
+            Circle(MazeVisuals.HazardRadius + MazeVisuals.HazardRimGrowth,
+                new SolidColorBrush(Color.FromRgb(54, 65, 50)));
+            Circle(MazeVisuals.HazardRadius, new SolidColorBrush(Color.FromRgb(1, 4, 3)));
+        }
+        else
+        {
+            Circle(MazeVisuals.GoalRadius + MazeVisuals.GoalRimGrowth,
+                new SolidColorBrush(Color.FromRgb(10, 18, 13)), 3, 5);
+            Circle(MazeVisuals.GoalRadius, new SolidColorBrush(Color.FromRgb(1, 5, 3)));
+        }
+        return visual;
     }
 
     private static EditorTag? FindEditorTag(DependencyObject? visual)
@@ -514,9 +573,15 @@ public partial class MainWindow : Window
     }
     private void UpdateTitle() => Title = $"Rolling Maze Designer — {_maze.Name}{(_dirty ? " *" : "")}";
     private void Board_SizeChanged(object sender, SizeChangedEventArgs e) => Render();
-    private Point Clamp(Point p) => new(Math.Clamp(p.X, 0, Board.ActualWidth), Math.Clamp(p.Y, 0, Board.ActualHeight));
-    private MazePoint Normalize(Point p) => new(p.X / Board.ActualWidth, p.Y / Board.ActualHeight);
-    private Point ToPoint(MazePoint p) => new(p.X * Board.ActualWidth, p.Y * Board.ActualHeight);
+    private Point Clamp(Point p) => new(
+        Math.Clamp(p.X, MazeLayout.WallInset, MazeLayout.Width - MazeLayout.WallInset),
+        Math.Clamp(p.Y, MazeLayout.WallInset, MazeLayout.Height - MazeLayout.WallInset));
+    private MazePoint Normalize(Point p) => new(
+        (p.X - MazeLayout.WallInset) / (MazeLayout.Width - 2d * MazeLayout.WallInset),
+        (p.Y - MazeLayout.WallInset) / (MazeLayout.Height - 2d * MazeLayout.WallInset));
+    private Point ToPoint(MazePoint p) => new(
+        MazeLayout.WallInset + p.X * (MazeLayout.Width - 2d * MazeLayout.WallInset),
+        MazeLayout.WallInset + p.Y * (MazeLayout.Height - 2d * MazeLayout.WallInset));
     private static string SafeName(string name) => string.Concat(name.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
     private static string MazeNameFromPath(string path)
     {

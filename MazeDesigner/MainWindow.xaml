@@ -138,11 +138,14 @@
 
     <Grid Margin="12">
       <Grid>
-        <Border Background="#263F30" BorderBrush="#875F32" BorderThickness="8" CornerRadius="18" ClipToBounds="True">
-          <Canvas x:Name="Board" Background="#264A34" MouseLeftButtonDown="Board_MouseLeftButtonDown"
-                  MouseMove="Board_MouseMove" MouseLeftButtonUp="Board_MouseLeftButtonUp"
-                  LostMouseCapture="Board_LostMouseCapture" SizeChanged="Board_SizeChanged" />
-        </Border>
+        <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Grid x:Name="MazeSurface" Background="#193124" ClipToBounds="True">
+            <Border Margin="16" Background="#264A34" BorderBrush="#875F32" BorderThickness="16" CornerRadius="24" />
+            <Canvas x:Name="Board" Background="Transparent" MouseLeftButtonDown="Board_MouseLeftButtonDown"
+                    MouseMove="Board_MouseMove" MouseLeftButtonUp="Board_MouseLeftButtonUp"
+                    LostMouseCapture="Board_LostMouseCapture" SizeChanged="Board_SizeChanged" />
+          </Grid>
+        </Viewbox>
         <TextBlock x:Name="StatusText" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="10"
                    Background="#CC17251D" Foreground="White" Padding="12,6" Text="Ready" />
       </Grid>

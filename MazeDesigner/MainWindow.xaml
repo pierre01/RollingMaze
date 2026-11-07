@@ -1,7 +1,7 @@
 <Window x:Class="MazeDesigner.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Rolling Maze Designer" Width="1100" Height="760" MinWidth="760" MinHeight="540"
+        Title="Rolling Maze Designer" Width="1000" Height="1100" MinWidth="760" MinHeight="700"
         Background="#17251D">
   <Window.Resources>
     <DrawingImage x:Key="SelectIcon">

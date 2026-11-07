@@ -7,46 +7,35 @@
              BackgroundColor="#101713">
 
     <Grid>
-        <skia:SKCanvasView x:Name="GameCanvas"
-                           PaintSurface="OnPaintSurface"
-                           EnableTouchEvents="True"
-                           Touch="OnCanvasTouch" />
+        <Grid RowDefinitions="Auto,*,Auto">
+            <VerticalStackLayout Grid.Row="0" Padding="16,8" Spacing="6"
+                                 BackgroundColor="#1B2620" InputTransparent="True">
+                <HorizontalStackLayout Spacing="10">
+                    <Label x:Name="MaterialDot" Text="●" FontSize="18" VerticalTextAlignment="Center" />
+                    <Label x:Name="StatusLabel" Text="Choose a ball" TextColor="White" FontSize="15" VerticalTextAlignment="Center" />
+                </HorizontalStackLayout>
+                <FlexLayout Direction="Row" Wrap="Wrap" JustifyContent="SpaceBetween" AlignItems="Center">
+                    <Label x:Name="TimerLabel" Text="TIME 120" TextColor="#F3E8C9" FontSize="14" FontAttributes="Bold" Margin="0,2,12,2" />
+                    <Label x:Name="LivesLabel" Text="LIVES ♥♥♥" TextColor="#E76D5B" FontSize="14" FontAttributes="Bold" Margin="0,2,12,2" />
+                    <Label x:Name="ScoreLabel" Text="SCORE 0" TextColor="#8FD1A4" FontSize="14" FontAttributes="Bold" Margin="0,2,12,2" />
+                    <Label x:Name="BestScoreLabel" Text="BEST 0" TextColor="#F2CF55" FontSize="14" FontAttributes="Bold" Margin="0,2,0,2" />
+                </FlexLayout>
+            </VerticalStackLayout>
 
-        <Grid Padding="18" InputTransparent="True">
-            <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
-                <Border StrokeThickness="0"
-                        BackgroundColor="#B91B2620"
-                        StrokeShape="RoundRectangle 18"
-                        Padding="14,9"
-                        HorizontalOptions="Start">
-                    <HorizontalStackLayout Spacing="10">
-                        <Label x:Name="MaterialDot" Text="●" FontSize="18" VerticalTextAlignment="Center" />
-                        <Label x:Name="StatusLabel" Text="Choose a ball" TextColor="White" FontSize="15" VerticalTextAlignment="Center" />
-                    </HorizontalStackLayout>
-                </Border>
-                <Border StrokeThickness="0"
-                        Grid.Row="1"
-                        BackgroundColor="#B91B2620"
-                        StrokeShape="RoundRectangle 18"
-                        Padding="14,9"
-                        HorizontalOptions="End">
-                    <HorizontalStackLayout Spacing="14">
-                        <Label x:Name="TimerLabel" Text="TIME 120" TextColor="#F3E8C9" FontSize="14" FontAttributes="Bold" />
-                        <Label x:Name="LivesLabel" Text="LIVES ♥♥♥" TextColor="#E76D5B" FontSize="14" FontAttributes="Bold" />
-                        <Label x:Name="ScoreLabel" Text="SCORE 0" TextColor="#8FD1A4" FontSize="14" FontAttributes="Bold" />
-                        <Label x:Name="BestScoreLabel" Text="BEST 0" TextColor="#F2CF55" FontSize="14" FontAttributes="Bold" />
-                    </HorizontalStackLayout>
-                </Border>
-                <Label Grid.Row="2"
-                       Text="KNOCK BEHIND DEVICE TO BOUNCE"
+            <skia:SKCanvasView x:Name="GameCanvas" Grid.Row="1"
+                               PaintSurface="OnPaintSurface"
+                               EnableTouchEvents="True"
+                               Touch="OnCanvasTouch" />
+
+            <VerticalStackLayout x:Name="FooterPanel" Grid.Row="2" Padding="12,6" Spacing="4">
+                <Label Text="KNOCK BEHIND DEVICE TO BOUNCE"
                        TextColor="#8FD1A4"
                        FontSize="11"
                        FontAttributes="Bold"
-                       CharacterSpacing="2"
-                       HorizontalOptions="Center"
-                       VerticalOptions="End"
-                       Margin="0,0,0,12" />
-            </Grid>
+                       CharacterSpacing="1"
+                       HorizontalTextAlignment="Center"
+                       InputTransparent="True" />
+            </VerticalStackLayout>
         </Grid>
 
         <Grid x:Name="SelectionOverlay" BackgroundColor="#E90A100D" Padding="28">

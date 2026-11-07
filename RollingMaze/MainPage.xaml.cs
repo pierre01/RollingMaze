@@ -48,6 +48,7 @@ public partial class MainPage : ContentPage
 
     private const float BallRadius = 24f;
     private const float WallInset = 24f;
+    private static readonly SKColor MazeWallColor = new(135, 95, 50);
     private const float GoalRadius = 34f;
     private const float HazardRadius = 44f;
     private const float HazardCaptureRadius = 28f;
@@ -675,7 +676,7 @@ public partial class MainPage : ContentPage
     private static void DrawWalls(SKCanvas canvas, int width, int height)
     {
         using var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 80), Style = SKPaintStyle.Stroke, StrokeWidth = 22, IsAntialias = true };
-        using var wall = new SKPaint { Color = new SKColor(160, 126, 73), Style = SKPaintStyle.Stroke, StrokeWidth = 16, IsAntialias = true };
+        using var wall = new SKPaint { Color = MazeWallColor, Style = SKPaintStyle.Stroke, StrokeWidth = 16, IsAntialias = true };
         var rect = new SKRect(WallInset, WallInset, width - WallInset, height - WallInset);
         canvas.DrawRoundRect(rect, 24, 24, shadow);
         canvas.DrawRoundRect(rect, 24, 24, wall);
@@ -692,7 +693,7 @@ public partial class MainPage : ContentPage
         };
         using var divider = new SKPaint
         {
-            Color = new SKColor(135, 95, 50),
+            Color = MazeWallColor,
             StrokeWidth = 16,
             StrokeCap = SKStrokeCap.Round,
             IsAntialias = true

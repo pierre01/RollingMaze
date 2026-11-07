@@ -138,7 +138,7 @@
 
     <Grid Margin="12">
       <Grid>
-        <Border Background="#263F30" BorderBrush="#A07E49" BorderThickness="8" CornerRadius="18" ClipToBounds="True">
+        <Border Background="#263F30" BorderBrush="#875F32" BorderThickness="8" CornerRadius="18" ClipToBounds="True">
           <Canvas x:Name="Board" Background="#264A34" MouseLeftButtonDown="Board_MouseLeftButtonDown"
                   MouseMove="Board_MouseMove" MouseLeftButtonUp="Board_MouseLeftButtonUp"
                   LostMouseCapture="Board_LostMouseCapture" SizeChanged="Board_SizeChanged" />

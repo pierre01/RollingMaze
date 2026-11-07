@@ -17,7 +17,8 @@ public sealed class MazeDefinition
     public MazePoint? Dip { get; set; }
 }
 
-public sealed record MazePoint(double X, double Y);
+public sealed record MazePoint(double X, double Y,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int Score = 0);
 
 public sealed record MazeWallDefinition(MazePoint Start, MazePoint End);
 
@@ -65,7 +66,8 @@ public static class MazeFile
             MazeWallDefinition wall = maze.Walls[i];
             ValidatePoint(wall.Start, $"walls[{i}].start");
             ValidatePoint(wall.End, $"walls[{i}].end");
-            if (wall.Start == wall.End) throw new InvalidDataException($"walls[{i}] has zero length.");
+            if (wall.Start.X == wall.End.X && wall.Start.Y == wall.End.Y)
+                throw new InvalidDataException($"walls[{i}] has zero length.");
         }
     }
 

@@ -30,4 +30,10 @@ While the diagnostic panel is open, samples are also logged five times per secon
 dotnet run --project MazeDesigner
 ```
 
-Choose **Draw wall** and drag on the board, or select a placement tool and click. In **Select / move** mode, drag existing items and use **Delete selected** when needed. The saved files use the exact parser consumed by RollingMaze.
+Toggle **Add Walls** on and drag on the board to draw consecutive walls; click it again to return to **Select / Move**. You can also choose the **Select / Move** arrow button or **Maze > Select / Move** to stop drawing walls. The **Maze** menu shows the active selection or wall creation mode. Other placement tools add an item with a click. In **Select / Move** mode, drag existing items and use **Delete** when needed. The saved files use the exact parser consumed by RollingMaze.
+
+Hold **Shift** while drawing a wall to constrain it to horizontal or vertical, whichever is closest to the drag direction. Keep Shift held when releasing the mouse to create the constrained wall.
+
+Use **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Y` or `Ctrl+Shift+Z`) from the toolbar or **Edit** menu. Adding, moving, resizing, deleting, cutting, and pasting items can be undone; a complete drag counts as one edit. Opening or creating a maze clears history. Saving preserves history, and returning to the saved state clears the unsaved-changes marker.
+
+Run the undo/redo regression checks with `dotnet run --project tests/MazeHistory.Checks`.

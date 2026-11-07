@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
@@ -17,7 +18,9 @@ public partial class MainWindow : Window
     private enum DragKind { None, NewWall, Wall, WallStart, WallEnd, Start, Goal, Hole, BlackHole, Dip }
 
     private MazeDefinition _maze = NewMaze();
+    private readonly MazeEditHistory _history = new();
     private Tool _tool;
+    private bool _updatingTool;
     private DragKind _dragKind;
     private Point _dragStart;
     private MazeWallDefinition? _selectedWall;
@@ -35,6 +38,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _history.Reset(_maze);
         LoadRecentItems();
         Loaded += (_, _) => Render();
         Closing += (_, e) => { if (!ConfirmDiscard()) e.Cancel = true; };
@@ -44,19 +48,47 @@ public partial class MainWindow : Window
 
     private void Tool_Checked(object sender, RoutedEventArgs e)
     {
-        if (sender is RadioButton { Tag: string tag } && Enum.TryParse(tag, out Tool tool)) _tool = tool;
+        if (!_updatingTool && sender is RadioButton { Tag: string tag } && Enum.TryParse(tag, out Tool tool))
+            SetTool(tool);
+    }
+
+    private void SetTool(Tool tool)
+    {
+        _tool = tool;
+        // The initial Select radio event can fire before the other controls exist.
+        if (WallToolButton is null) return;
+        _updatingTool = true;
+        try
+        {
+            SelectToolButton.IsChecked = tool == Tool.Select;
+            WallToolButton.IsChecked = tool == Tool.Wall;
+            HoleToolButton.IsChecked = tool == Tool.Hole;
+            BlackHoleToolButton.IsChecked = tool == Tool.BlackHole;
+            DipToolButton.IsChecked = tool == Tool.Dip;
+        }
+        finally { _updatingTool = false; }
+        StatusText.Text = tool switch
+        {
+            Tool.Wall => "Add Walls — drag to draw; click Add Walls again to exit",
+            Tool.Select => "Select / Move",
+            Tool.BlackHole => "Add Black Hole",
+            _ => $"Add {tool}"
+        };
+    }
+
+    private void WallTool_Click(object sender, RoutedEventArgs e)
+    {
+        bool enabled = sender is MenuItem item ? item.IsChecked : ((ToggleButton)sender).IsChecked == true;
+        SetTool(enabled ? Tool.Wall : Tool.Select);
     }
 
     private void ToolMenu_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is MenuItem { Tag: string tag } && Enum.TryParse(tag, out Tool tool))
+        if (sender is MenuItem { Tag: string tag } item && Enum.TryParse(tag, out Tool tool))
         {
-            _tool = tool;
-            if (tool == Tool.Wall) WallToolButton.IsChecked = true;
-            else if (tool == Tool.Hole) HoleToolButton.IsChecked = true;
-            else if (tool == Tool.BlackHole) BlackHoleToolButton.IsChecked = true;
-            else if (tool == Tool.Dip) DipToolButton.IsChecked = true;
-            StatusText.Text = $"{((MenuItem)sender).Header}".Replace("_", "");
+            SetTool(tool);
+            // Selecting the active mode should leave its menu checkmark on.
+            item.GetBindingExpression(MenuItem.IsCheckedProperty)?.UpdateTarget();
         }
     }
 
@@ -65,6 +97,7 @@ public partial class MainWindow : Window
         Point p = Clamp(e.GetPosition(Board));
         _dragStart = p;
         Board.CaptureMouse();
+        _history.BeginEdit(_maze);
 
         if (_tool == Tool.Wall)
         {
@@ -87,6 +120,7 @@ public partial class MainWindow : Window
             }
             SetDirty();
             Render();
+            CommitEdit();
             Board.ReleaseMouseCapture();
             SelectTool();
             return;
@@ -131,12 +165,15 @@ public partial class MainWindow : Window
         if (_dragKind == DragKind.Wall && _selectedWall is not null)
         {
             _maze.Walls[_maze.Walls.IndexOf(_selectedWall)] = _selectedWall = new(
-                Normalize(Clamp(ToPoint(_selectedWall.Start) + new Vector(dx, dy))),
-                Normalize(Clamp(ToPoint(_selectedWall.End) + new Vector(dx, dy))));
+                Normalize(Clamp(ToPoint(_selectedWall.Start) + new Vector(dx, dy))) with { Score = _selectedWall.Start.Score },
+                Normalize(Clamp(ToPoint(_selectedWall.End) + new Vector(dx, dy))) with { Score = _selectedWall.End.Score });
         }
         else if (_dragKind is DragKind.WallStart or DragKind.WallEnd && _selectedWall is not null)
         {
-            MazePoint endpoint = Normalize(p);
+            MazePoint endpoint = Normalize(p) with
+            {
+                Score = (_dragKind == DragKind.WallStart ? _selectedWall.Start : _selectedWall.End).Score
+            };
             int index = _maze.Walls.IndexOf(_selectedWall);
             _selectedWall = _dragKind == DragKind.WallStart
                 ? new MazeWallDefinition(endpoint, _selectedWall.End)
@@ -145,7 +182,7 @@ public partial class MainWindow : Window
         }
         else if (_selectedPoint is not null)
         {
-            MazePoint moved = Normalize(p);
+            MazePoint moved = Normalize(p) with { Score = _selectedPoint.Score };
             if (_dragKind == DragKind.Start) _maze.Start = moved;
             else if (_dragKind == DragKind.Goal) _maze.Goal = moved;
             else if (_dragKind == DragKind.Dip) _maze.Dip = moved;
@@ -179,13 +216,56 @@ public partial class MainWindow : Window
             {
                 _maze.Walls.Add(new(Normalize(_dragStart), Normalize(end)));
                 SetDirty();
-                SelectTool();
             }
         }
         _dragKind = DragKind.None;
         _preview = null;
+        CommitEdit();
         Board.ReleaseMouseCapture();
         Render();
+    }
+
+    private void Board_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        // Keep a partially completed move as one edit if capture is interrupted.
+        _dragKind = DragKind.None;
+        _preview = null;
+        CommitEdit();
+        Render();
+    }
+
+    private void CommitEdit()
+    {
+        _history.CommitEdit(_maze);
+        SetDirty();
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void Undo_CanExecute(object sender, CanExecuteRoutedEventArgs e) =>
+        e.CanExecute = Board?.IsMouseCaptured != true && _history.CanUndo;
+
+    private void Redo_CanExecute(object sender, CanExecuteRoutedEventArgs e) =>
+        e.CanExecute = Board?.IsMouseCaptured != true && _history.CanRedo;
+
+    private void Undo_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        _history.Undo(_maze);
+        HistoryRestored("Undo");
+    }
+
+    private void Redo_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        _history.Redo(_maze);
+        HistoryRestored("Redo");
+    }
+
+    private void HistoryRestored(string action)
+    {
+        ClearSelection();
+        SetDirty();
+        StatusText.Text = action;
+        Render();
+        CommandManager.InvalidateRequerySuggested();
     }
 
     private void Render()
@@ -206,7 +286,7 @@ public partial class MainWindow : Window
         }
         AddMarker(_maze.Start, DragKind.Start, Brushes.DodgerBlue, "S", 18);
         AddMarker(_maze.Goal, DragKind.Goal, Brushes.Gold, "G", 24);
-        foreach (MazePoint hole in _maze.Holes) AddMarker(hole, DragKind.Hole, Brushes.Black, "", 20);
+        foreach (MazePoint hole in _maze.Holes) AddMarker(hole, DragKind.Hole, Brushes.Black, "", 27);
         foreach (MazePoint blackHole in _maze.BlackHoles) AddMarker(blackHole, DragKind.BlackHole, Brushes.Black, "BH", 42);
         if (_maze.Dip is not null) AddMarker(_maze.Dip, DragKind.Dip, Brushes.SeaGreen, "D", 35);
     }
@@ -262,26 +342,27 @@ public partial class MainWindow : Window
 
     private void DeleteSelection()
     {
+        _history.BeginEdit(_maze);
         if (_selectedWall is not null) _maze.Walls.Remove(_selectedWall);
         else if (_selectedPoint is not null && _selectedKind == DragKind.Hole) _maze.Holes.Remove(_selectedPoint);
         else if (_selectedPoint is not null && _selectedKind == DragKind.BlackHole) _maze.BlackHoles.Remove(_selectedPoint);
         else if (_selectedPoint is not null && _selectedKind == DragKind.Dip) _maze.Dip = null;
-        else return;
+        else { CommitEdit(); return; }
+        CommitEdit();
         _selectedWall = null; _selectedPoint = null; _selectedKind = DragKind.None; SetDirty(); Render();
     }
 
     private void SelectTool()
     {
-        _tool = Tool.Select;
-        SelectToolButton.IsChecked = true;
-        StatusText.Text = "Select / Move";
+        SetTool(Tool.Select);
     }
 
     private void Selection_CanExecute(object sender, CanExecuteRoutedEventArgs e) =>
-        e.CanExecute = _selectedWall is not null ||
-            (_selectedPoint is not null && _selectedKind is DragKind.Hole or DragKind.BlackHole or DragKind.Dip);
+        e.CanExecute = Board?.IsMouseCaptured != true && (_selectedWall is not null ||
+            (_selectedPoint is not null && _selectedKind is DragKind.Hole or DragKind.BlackHole or DragKind.Dip));
 
-    private void Paste_CanExecute(object sender, CanExecuteRoutedEventArgs e) => e.CanExecute = _clipboardItem is not null;
+    private void Paste_CanExecute(object sender, CanExecuteRoutedEventArgs e) =>
+        e.CanExecute = Board?.IsMouseCaptured != true && _clipboardItem is not null;
 
     private void Copy_Executed(object sender, ExecutedRoutedEventArgs e)
     {
@@ -301,7 +382,8 @@ public partial class MainWindow : Window
     private void Paste_Executed(object sender, ExecutedRoutedEventArgs e)
     {
         if (_clipboardItem is null) return;
-        MazePoint Offset(MazePoint p) => new(Math.Clamp(p.X + 0.02, 0, 1), Math.Clamp(p.Y + 0.02, 0, 1));
+        _history.BeginEdit(_maze);
+        MazePoint Offset(MazePoint p) => p with { X = Math.Clamp(p.X + 0.02, 0, 1), Y = Math.Clamp(p.Y + 0.02, 0, 1) };
 
         _selectedWall = null;
         _selectedPoint = null;
@@ -321,7 +403,7 @@ public partial class MainWindow : Window
             _selectedPoint = point;
             _clipboardItem = new ClipboardItem(_clipboardItem.Kind, point, null);
         }
-        SetDirty();
+        CommitEdit();
         SelectTool();
         Render();
     }
@@ -332,6 +414,7 @@ public partial class MainWindow : Window
     {
         if (!ConfirmDiscard()) return;
         _maze = NewMaze(); _path = null; _dirty = false; ClearSelection(); SelectTool(); Render(); UpdateTitle();
+        ResetHistory();
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)
@@ -349,6 +432,7 @@ public partial class MainWindow : Window
             _maze = MazeFile.Load(path);
             _maze.Name = MazeNameFromPath(path);
             _path = path; _dirty = false; ClearSelection(); SelectTool(); Render(); UpdateTitle();
+            ResetHistory();
             AddRecentPath(path);
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Cannot open maze", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -403,6 +487,7 @@ public partial class MainWindow : Window
         {
             _maze.Name = MazeNameFromPath(path);
             MazeFile.Save(path, _maze); _path = path; _dirty = false;
+            _history.MarkSaved(_maze);
             StatusText.Text = $"Saved {System.IO.Path.GetFileName(path)}"; UpdateTitle();
             AddRecentPath(path);
         }
@@ -410,8 +495,23 @@ public partial class MainWindow : Window
     }
 
     private bool ConfirmDiscard() => !_dirty || new DiscardChangesDialog { Owner = this }.ShowDialog() == true;
+    private void ResetHistory()
+    {
+        _dragKind = DragKind.None;
+        _preview = null;
+        _history.Reset(_maze);
+        Board.ReleaseMouseCapture();
+        Render();
+        CommandManager.InvalidateRequerySuggested();
+    }
+
     private void ClearSelection() { _selectedWall = null; _selectedPoint = null; _selectedKind = DragKind.None; }
-    private void SetDirty() { _dirty = true; StatusText.Text = "Unsaved changes"; UpdateTitle(); }
+    private void SetDirty()
+    {
+        _dirty = _history.IsDirty(_maze);
+        StatusText.Text = _dirty ? "Unsaved changes" : "No unsaved changes";
+        UpdateTitle();
+    }
     private void UpdateTitle() => Title = $"Rolling Maze Designer — {_maze.Name}{(_dirty ? " *" : "")}";
     private void Board_SizeChanged(object sender, SizeChangedEventArgs e) => Render();
     private Point Clamp(Point p) => new(Math.Clamp(p.X, 0, Board.ActualWidth), Math.Clamp(p.Y, 0, Board.ActualHeight));

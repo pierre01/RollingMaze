@@ -49,8 +49,8 @@ public partial class MainPage : ContentPage
     private const float BallRadius = 24f;
     private const float WallInset = 24f;
     private const float GoalRadius = 34f;
-    private const float HazardRadius = 34f;
-    private const float HazardCaptureRadius = 22f;
+    private const float HazardRadius = 44f;
+    private const float HazardCaptureRadius = 28f;
     private const float BlackHoleRadius = 32f;
     private const float BlackHoleAccretionRadius = 66f;
     private const float BlackHoleGraphicSize = 156f;

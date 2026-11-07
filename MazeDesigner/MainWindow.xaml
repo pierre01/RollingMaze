@@ -45,6 +45,9 @@
     <KeyBinding Key="N" Modifiers="Control" Command="ApplicationCommands.New" />
     <KeyBinding Key="O" Modifiers="Control" Command="ApplicationCommands.Open" />
     <KeyBinding Key="S" Modifiers="Control" Command="ApplicationCommands.Save" />
+    <KeyBinding Key="Z" Modifiers="Control" Command="ApplicationCommands.Undo" />
+    <KeyBinding Key="Y" Modifiers="Control" Command="ApplicationCommands.Redo" />
+    <KeyBinding Key="Z" Modifiers="Control+Shift" Command="ApplicationCommands.Redo" />
     <KeyBinding Key="X" Modifiers="Control" Command="ApplicationCommands.Cut" />
     <KeyBinding Key="C" Modifiers="Control" Command="ApplicationCommands.Copy" />
     <KeyBinding Key="V" Modifiers="Control" Command="ApplicationCommands.Paste" />
@@ -54,6 +57,8 @@
     <CommandBinding Command="ApplicationCommands.New" Executed="New_Executed" />
     <CommandBinding Command="ApplicationCommands.Open" Executed="Open_Executed" />
     <CommandBinding Command="ApplicationCommands.Save" Executed="Save_Executed" />
+    <CommandBinding Command="ApplicationCommands.Undo" Executed="Undo_Executed" CanExecute="Undo_CanExecute" />
+    <CommandBinding Command="ApplicationCommands.Redo" Executed="Redo_Executed" CanExecute="Redo_CanExecute" />
     <CommandBinding Command="ApplicationCommands.Cut" Executed="Cut_Executed" CanExecute="Selection_CanExecute" />
     <CommandBinding Command="ApplicationCommands.Copy" Executed="Copy_Executed" CanExecute="Selection_CanExecute" />
     <CommandBinding Command="ApplicationCommands.Paste" Executed="Paste_Executed" CanExecute="Paste_CanExecute" />
@@ -74,6 +79,9 @@
         <MenuItem Header="_Close" Click="Close_Click" />
       </MenuItem>
       <MenuItem Header="_Edit">
+        <MenuItem Header="_Undo" Command="ApplicationCommands.Undo" InputGestureText="Ctrl+Z" />
+        <MenuItem Header="_Redo" Command="ApplicationCommands.Redo" InputGestureText="Ctrl+Y" />
+        <Separator />
         <MenuItem Header="Cu_t" Command="ApplicationCommands.Cut" InputGestureText="Ctrl+X" />
         <MenuItem Header="_Copy" Command="ApplicationCommands.Copy" InputGestureText="Ctrl+C" />
         <MenuItem Header="_Paste" Command="ApplicationCommands.Paste" InputGestureText="Ctrl+V" />
@@ -81,7 +89,13 @@
         <MenuItem Header="_Delete" Command="ApplicationCommands.Delete" InputGestureText="Del" />
       </MenuItem>
       <MenuItem Header="_Maze">
-        <MenuItem Header="Add _Wall" Tag="Wall" Click="ToolMenu_Click" />
+        <MenuItem Header="_Select / Move" Tag="Select" IsCheckable="True"
+                  IsChecked="{Binding IsChecked, ElementName=SelectToolButton, Mode=OneWay}" Click="ToolMenu_Click">
+          <MenuItem.Icon><Image Source="{StaticResource SelectIcon}" Width="16" Height="16" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Add _Walls" IsCheckable="True"
+                  IsChecked="{Binding IsChecked, ElementName=WallToolButton, Mode=OneWay}" Click="WallTool_Click" />
         <MenuItem Header="Add _Hole" Tag="Hole" Click="ToolMenu_Click" />
         <MenuItem Header="Add _Dip" Tag="Dip" Click="ToolMenu_Click" />
         <MenuItem Header="Add _Black Hole" Tag="BlackHole" Click="ToolMenu_Click" />
@@ -90,23 +104,26 @@
 
     <ToolBarTray DockPanel.Dock="Top" Background="#E9E9E9">
       <ToolBar>
+        <Button Command="ApplicationCommands.Undo" ToolTip="Undo (Ctrl+Z)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Undo" /></StackPanel></Button>
+        <Button Command="ApplicationCommands.Redo" ToolTip="Redo (Ctrl+Y or Ctrl+Shift+Z)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Redo" /></StackPanel></Button>
+        <Separator />
         <Button Command="ApplicationCommands.Save" ToolTip="Save (Ctrl+S)">
           <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Save" /></StackPanel>
         </Button>
-        <Separator />
-        <RadioButton x:Name="SelectToolButton" GroupName="Tools" Tag="Select" IsChecked="True"
-                     Checked="Tool_Checked" Padding="8,3" VerticalContentAlignment="Center" ToolTip="Select or move an item">
-          <StackPanel Orientation="Horizontal"><Image Source="{StaticResource SelectIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Select / Move" /></StackPanel>
-        </RadioButton>
         <Separator />
         <Button Command="ApplicationCommands.Cut" ToolTip="Cut (Ctrl+X)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8C6;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Cut" /></StackPanel></Button>
         <Button Command="ApplicationCommands.Copy" ToolTip="Copy (Ctrl+C)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Copy" /></StackPanel></Button>
         <Button Command="ApplicationCommands.Paste" ToolTip="Paste (Ctrl+V)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Paste" /></StackPanel></Button>
         <Button Command="ApplicationCommands.Delete" ToolTip="Delete selected item (Del)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Delete" /></StackPanel></Button>
         <Separator />
-        <RadioButton x:Name="WallToolButton" GroupName="Tools" Tag="Wall" Checked="Tool_Checked" Padding="8,3" ToolTip="Add a wall">
-          <StackPanel Orientation="Horizontal"><Image Source="{StaticResource WallIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Add Wall" /></StackPanel>
+        <RadioButton x:Name="SelectToolButton" GroupName="Tools" Tag="Select" IsChecked="True"
+                     Checked="Tool_Checked" Padding="8,3" VerticalContentAlignment="Center" ToolTip="Selection mode: select or move items and stop drawing walls">
+          <StackPanel Orientation="Horizontal"><Image Source="{StaticResource SelectIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Select / Move" /></StackPanel>
         </RadioButton>
+        <Separator />
+        <ToggleButton x:Name="WallToolButton" Click="WallTool_Click" Padding="8,3" ToolTip="Toggle wall creation mode. Hold Shift while drawing to constrain walls to horizontal or vertical.">
+          <StackPanel Orientation="Horizontal"><Image Source="{StaticResource WallIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Add Walls" /></StackPanel>
+        </ToggleButton>
         <RadioButton x:Name="HoleToolButton" GroupName="Tools" Tag="Hole" Checked="Tool_Checked" Padding="8,3" ToolTip="Add a hole">
           <StackPanel Orientation="Horizontal"><Image Source="{StaticResource HoleIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Add Hole" /></StackPanel>
         </RadioButton>
@@ -123,7 +140,8 @@
       <Grid>
         <Border Background="#263F30" BorderBrush="#A07E49" BorderThickness="8" CornerRadius="18" ClipToBounds="True">
           <Canvas x:Name="Board" Background="#264A34" MouseLeftButtonDown="Board_MouseLeftButtonDown"
-                  MouseMove="Board_MouseMove" MouseLeftButtonUp="Board_MouseLeftButtonUp" SizeChanged="Board_SizeChanged" />
+                  MouseMove="Board_MouseMove" MouseLeftButtonUp="Board_MouseLeftButtonUp"
+                  LostMouseCapture="Board_LostMouseCapture" SizeChanged="Board_SizeChanged" />
         </Border>
         <TextBlock x:Name="StatusText" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="10"
                    Background="#CC17251D" Foreground="White" Padding="12,6" Text="Ready" />

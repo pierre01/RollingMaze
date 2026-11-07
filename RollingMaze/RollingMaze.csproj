@@ -57,6 +57,7 @@
 		<!-- Images -->
 		<MauiImage Include="Resources\Images\*" />
 		<MauiImage Update="Resources\Images\black_hole.svg" Resize="True" BaseSize="156,156" />
+		<MauiImage Update="Resources\Images\flag_checkered.svg" Resize="True" BaseSize="64,64" />
 		
 		<!-- Custom Fonts -->
 		<MauiFont Include="Resources\Fonts\*" />

@@ -14,7 +14,9 @@ public partial class MainPage : ContentPage
     private SKPoint _velocity;
     private SKPoint _tilt;
     private DisplayRotation _displayRotation = DisplayRotation.Rotation0;
-    private SKSize _boardSize;
+    private readonly SKSize _boardSize = new(MazeLayout.Width, MazeLayout.Height);
+    private float _boardScale;
+    private SKPoint _boardOffset;
     private DateTime _lastFrame;
     private DateTime _startedAt;
     private bool _won;
@@ -46,16 +48,16 @@ public partial class MainPage : ContentPage
     private const int StartingLives = 3;
     private const double LevelTimeLimitSeconds = 120d;
 
-    private const float BallRadius = 24f;
-    private const float WallInset = 24f;
-    private const float GoalRadius = 34f;
-    private const float HazardRadius = 44f;
-    private const float HazardCaptureRadius = 28f;
-    private const float BlackHoleRadius = 32f;
+    private const float BallRadius = MazeVisuals.BallRadius;
+    private const float WallInset = MazeLayout.WallInset;
+    private static readonly SKColor MazeWallColor = new(135, 95, 50);
+    private const float GoalRadius = MazeVisuals.GoalRadius;
+    private const float HazardRadius = MazeVisuals.HazardRadius;
+    private const float BlackHoleRadius = MazeVisuals.BlackHoleRadius;
     private const float BlackHoleAccretionRadius = 66f;
-    private const float BlackHoleGraphicSize = 156f;
+    private const float BlackHoleGraphicSize = MazeVisuals.BlackHoleGraphicSize;
     private const float BlackHoleEventHorizon = 32f;
-    private const float BlackHoleInfluenceRadius = 240f;
+    private const float BlackHoleInfluenceRadius = MazeVisuals.BlackHoleInfluenceRadius;
     private const float BlackHoleGravity = 2200f;
     private const float DipRadius = 52f;
     private const float DipJumpSpeed = 360f;
@@ -477,15 +479,10 @@ public partial class MainPage : ContentPage
 
     private void CheckGoal()
     {
-        // An airborne ball passes over holes; it can only drop into the goal
-        // after returning close to the board surface.
-        if (_ballHeight > 5f)
-            return;
-
         SKPoint goal = GetGoalCenter();
         float dx = _position.X - goal.X;
         float dy = _position.Y - goal.Y;
-        if ((dx * dx) + (dy * dy) > (GoalRadius - 3) * (GoalRadius - 3))
+        if (!BallSurfaceContact.IsOverOpening(dx, dy, GoalRadius, _ballHeight))
             return;
 
         _won = true;
@@ -509,14 +506,14 @@ public partial class MainPage : ContentPage
 
     private void CheckHazardHoles()
     {
-        if (_falling || _ballHeight > 5f)
+        if (_falling)
             return;
 
         foreach (SKPoint hole in _hazardHoles)
         {
             float dx = _position.X - hole.X;
             float dy = _position.Y - hole.Y;
-            if ((dx * dx) + (dy * dy) <= HazardCaptureRadius * HazardCaptureRadius)
+            if (BallSurfaceContact.IsOverOpening(dx, dy, HazardRadius, _ballHeight))
             {
                 BeginFalling(hole, false);
                 return;
@@ -652,30 +649,45 @@ public partial class MainPage : ContentPage
     private void OnPaintSurface(object? sender, SKPaintSurfaceEventArgs e)
     {
         SKCanvas canvas = e.Surface.Canvas;
-        _boardSize = new SKSize(e.Info.Width, e.Info.Height);
-        canvas.Clear(new SKColor(25, 49, 36));
+        var viewport = MazeLayout.Fit(e.Info.Width, e.Info.Height);
+        _boardScale = (float)viewport.Scale;
+        _boardOffset = new SKPoint((float)viewport.Left, (float)viewport.Top);
+        canvas.Clear(new SKColor(16, 23, 19));
+        if (_boardScale <= 0)
+        {
+            GoalFlag.IsVisible = false;
+            return;
+        }
+        UpdateGoalFlag(e.Info.Width, e.Info.Height);
+        canvas.Save();
+        canvas.Translate(_boardOffset.X, _boardOffset.Y);
+        canvas.Scale(_boardScale);
+        canvas.ClipRect(new SKRect(0, 0, MazeLayout.Width, MazeLayout.Height));
+        using var background = new SKPaint { Color = new SKColor(25, 49, 36) };
+        canvas.DrawRect(0, 0, MazeLayout.Width, MazeLayout.Height, background);
 
         using var floor = new SKPaint { Color = new SKColor(38, 74, 52), IsAntialias = true };
-        canvas.DrawRoundRect(new SKRect(WallInset, WallInset, e.Info.Width - WallInset, e.Info.Height - WallInset), 24, 24, floor);
+        canvas.DrawRoundRect(new SKRect(WallInset, WallInset, MazeLayout.Width - WallInset, MazeLayout.Height - WallInset), 24, 24, floor);
 
         using var grain = new SKPaint { Color = new SKColor(255, 255, 255, 10), StrokeWidth = 2 };
-        for (float y = WallInset + 24; y < e.Info.Height - WallInset; y += 34)
-            canvas.DrawLine(WallInset + 18, y, e.Info.Width - WallInset - 18, y, grain);
+        for (float y = WallInset + 24; y < MazeLayout.Height - WallInset; y += 34)
+            canvas.DrawLine(WallInset + 18, y, MazeLayout.Width - WallInset - 18, y, grain);
 
         DrawGoal(canvas);
         DrawDip(canvas);
         DrawBlackHoles(canvas);
         DrawHazardHoles(canvas);
         DrawMazeWalls(canvas);
-        DrawWalls(canvas, e.Info.Width, e.Info.Height);
+        DrawWalls(canvas, MazeLayout.Width, MazeLayout.Height);
         if (_ball is not null)
             DrawBall(canvas, _ball);
+        canvas.Restore();
     }
 
     private static void DrawWalls(SKCanvas canvas, int width, int height)
     {
         using var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 80), Style = SKPaintStyle.Stroke, StrokeWidth = 22, IsAntialias = true };
-        using var wall = new SKPaint { Color = new SKColor(160, 126, 73), Style = SKPaintStyle.Stroke, StrokeWidth = 16, IsAntialias = true };
+        using var wall = new SKPaint { Color = MazeWallColor, Style = SKPaintStyle.Stroke, StrokeWidth = 16, IsAntialias = true };
         var rect = new SKRect(WallInset, WallInset, width - WallInset, height - WallInset);
         canvas.DrawRoundRect(rect, 24, 24, shadow);
         canvas.DrawRoundRect(rect, 24, 24, wall);
@@ -692,7 +704,7 @@ public partial class MainPage : ContentPage
         };
         using var divider = new SKPaint
         {
-            Color = new SKColor(135, 95, 50),
+            Color = MazeWallColor,
             StrokeWidth = 16,
             StrokeCap = SKStrokeCap.Round,
             IsAntialias = true
@@ -718,30 +730,36 @@ public partial class MainPage : ContentPage
         SKPoint goal = GetGoalCenter();
         using var rim = new SKPaint { Color = new SKColor(10, 18, 13), IsAntialias = true };
         using var hole = new SKPaint { Color = new SKColor(1, 5, 3), IsAntialias = true };
-        canvas.DrawCircle(goal.X + 3, goal.Y + 5, GoalRadius + 5, rim);
+        canvas.DrawCircle(goal.X + 3, goal.Y + 5, GoalRadius + MazeVisuals.GoalRimGrowth, rim);
         canvas.DrawCircle(goal, GoalRadius, hole);
+    }
+
+    private void UpdateGoalFlag(int pixelWidth, int pixelHeight)
+    {
+        // The native image uses device-independent units; Skia paints in surface pixels.
+        // Apply the same centered board transform, then convert to the layout's units.
+        SKPoint goal = GetGoalCenter();
+        double unitsX = GameCanvas.Width / pixelWidth;
+        double unitsY = GameCanvas.Height / pixelHeight;
+        double size = GoalRadius * 1.6 * _boardScale;
+        var bounds = new Rect(
+            (_boardOffset.X + goal.X * _boardScale - size / 2) * unitsX,
+            (_boardOffset.Y + goal.Y * _boardScale - size / 2) * unitsY,
+            size * unitsX, size * unitsY);
+        if (AbsoluteLayout.GetLayoutBounds(GoalFlag) != bounds)
+            AbsoluteLayout.SetLayoutBounds(GoalFlag, bounds);
+        GoalFlag.IsVisible = true;
     }
 
     private void DrawHazardHoles(SKCanvas canvas)
     {
-        using var rim = new SKPaint { Color = new SKColor(91, 42, 34), IsAntialias = true };
+        using var rim = new SKPaint { Color = new SKColor(54, 65, 50), IsAntialias = true };
         using var hole = new SKPaint { Color = new SKColor(1, 4, 3), IsAntialias = true };
-        using var glint = new SKPaint
-        {
-            Color = new SKColor(226, 102, 76, 105),
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = 2f,
-            IsAntialias = true
-        };
 
         foreach (SKPoint center in _hazardHoles)
         {
-            canvas.DrawCircle(center.X + 2, center.Y + 4, HazardRadius + 4, rim);
+            canvas.DrawCircle(center, HazardRadius + MazeVisuals.HazardRimGrowth, rim);
             canvas.DrawCircle(center, HazardRadius, hole);
-            float glintRadius = HazardRadius - 5f;
-            canvas.DrawArc(
-                new SKRect(center.X - glintRadius, center.Y - glintRadius, center.X + glintRadius, center.Y + glintRadius),
-                205, 105, false, glint);
         }
     }
 
@@ -789,13 +807,8 @@ public partial class MainPage : ContentPage
         }
     }
 
-    // Path data from Resources/Images/black_hole.svg.
     private static readonly SKPath[] BlackHoleGraphicPaths =
-    [
-        SKPath.ParseSvgPathData("M14 142 L91.2 145 A52.6 52.6 0 0 1 191.6 122.5 L214 130.3 A71.6 71.6 0 0 0 80 111.5 C76.4 117.1 75.2 124.4 70 129 C66.3 133 61.4 136.1 56 137.2 C42.3 140.7 28 140.6 14 142 Z"),
-        SKPath.ParseSvgPathData("M271 142.3 L196.4 143.2 A52.6 52.6 0 0 1 96 166.5 L73.6 158.7 A71.6 71.6 0 0 0 206.5 181 C209.3 173.7 214.7 167.7 220 162 C225.6 158 230.8 151.7 238 151 C248.4 145.8 259.6 144.7 271 142.3 Z"),
-        SKPath.ParseSvgPathData("M114 146.2 C142 145 172 143.9 202 142.9 L202 158.8 C176 154.2 146 149.6 114 146.2 Z")
-    ];
+        MazeVisuals.BlackHolePaths.Select(SKPath.ParseSvgPathData).ToArray();
 
     private void DrawDip(SKCanvas canvas)
     {
@@ -866,8 +879,13 @@ public partial class MainPage : ContentPage
 
     private void OnCanvasTouch(object? sender, SKTouchEventArgs e)
     {
+        if (_boardScale <= 0) return;
+        var location = new SKPoint(
+            (e.Location.X - _boardOffset.X) / _boardScale,
+            (e.Location.Y - _boardOffset.Y) / _boardScale);
         if (e.ActionType == SKTouchAction.Pressed)
-            _dragging = true;
+            _dragging = location.X >= 0 && location.X <= _boardSize.Width &&
+                        location.Y >= 0 && location.Y <= _boardSize.Height;
 
         if (e.ActionType == SKTouchAction.Released || e.ActionType == SKTouchAction.Cancelled)
         {
@@ -877,8 +895,8 @@ public partial class MainPage : ContentPage
         else if (_dragging && _boardSize.Width > 0 && _boardSize.Height > 0)
         {
             _tilt = new SKPoint(
-                Math.Clamp((e.Location.X - (_boardSize.Width / 2)) / (_boardSize.Width / 2), -1f, 1f),
-                Math.Clamp((e.Location.Y - (_boardSize.Height / 2)) / (_boardSize.Height / 2), -1f, 1f));
+                Math.Clamp((location.X - (_boardSize.Width / 2)) / (_boardSize.Width / 2), -1f, 1f),
+                Math.Clamp((location.Y - (_boardSize.Height / 2)) / (_boardSize.Height / 2), -1f, 1f));
         }
         e.Handled = true;
     }

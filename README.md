@@ -3,12 +3,13 @@
 The rolling maze is a simple game where the player controls a ball that rolls through a maze. The goal is to reach the end of the maze while avoiding obstacles.
 the Game rurns on the **MAUI** APP Main Screen. 
 It is designed for phones, or tablets that support accelerometers not desktops.
-It will run inside a SKiaSharp View that will fit the full window.
+The maze uses a fixed 5:4 (width:height), 1000×800 logical board in both the app and designer. It scales uniformly to fit the available space, with unused space around it. Ball sizes, obstacles, and physics stay consistent when resizing or rotating the device.
+The ball has a 21-unit radius and regular holes have a 27-unit radius. Surface support uses a tiny 1.5-unit contact patch directly below the ball's center of gravity. A grounded ball falls when that patch moves fully inside a hole; its visible edge overlapping a hole does not trigger a fall. Airborne balls can pass over regular holes and the goal. Wall collisions use the full sphere radius.
 At the start of the game the user will be asked which type of ball they will use (wood, silver, gold ) each have different physics, slickness, weight, inertia... 
 
 Work Balls with different physics work. 
 
-![Sample1](Images/Sample1.png)
+![Sample1](Images/Sample1.jpg)
 
 ## Maze files and designer
 
@@ -37,3 +38,7 @@ Hold **Shift** while drawing a wall to constrain it to horizontal or vertical, w
 Use **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Y` or `Ctrl+Shift+Z`) from the toolbar or **Edit** menu. Adding, moving, resizing, deleting, cutting, and pasting items can be undone; a complete drag counts as one edit. Opening or creating a maze clears history. Saving preserves history, and returning to the saved state clears the unsaved-changes marker.
 
 Run the undo/redo regression checks with `dotnet run --project tests/MazeHistory.Checks`.
+
+Run the board sizing and input transform checks with `dotnet run --project tests/MazeLayout.Checks`.
+
+On Windows, run the designer XAML loading and layout regression checks with `dotnet run --project tests/MazeDesigner.Checks`.

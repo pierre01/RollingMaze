@@ -2,6 +2,8 @@
 
 Maze files use UTF-8 JSON and the extension `.rollingmaze.json`. Coordinates are normalized to the playable board: `(0, 0)` is its top-left and `(1, 1)` is its bottom-right. This keeps a maze independent of screen size.
 
+Both the game and designer use the same fixed 1000×800 logical board (5:4 width:height), scaled uniformly to fit the screen. Normalized coordinates span the area inside the outer wall centerlines, inset 24 logical units from each edge. Existing version 1 files need no conversion.
+
 ```json
 {
   "formatVersion": 1,

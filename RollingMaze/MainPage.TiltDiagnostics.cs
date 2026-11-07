@@ -69,13 +69,11 @@ public partial class MainPage
                 ignorePull.IsToggled = false;
         };
 
-        // Keep selection and result overlays above these controls.
-        ((Grid)Content).Children.Insert(2, new VerticalStackLayout
+        // Reserve space below the board so diagnostic controls do not cover the maze.
+        FooterPanel.Children.Insert(0, new VerticalStackLayout
         {
             BackgroundColor = Color.FromArgb("#E6101713"),
             Padding = 8,
-            Margin = new Thickness(18, 0, 18, 42),
-            VerticalOptions = LayoutOptions.End,
             Children = { toggle, details }
         });
     }

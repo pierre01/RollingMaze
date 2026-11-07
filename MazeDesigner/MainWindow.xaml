@@ -3,46 +3,149 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Rolling Maze Designer" Width="1100" Height="760" MinWidth="760" MinHeight="540"
         Background="#17251D">
-  <DockPanel Margin="16">
-    <Border DockPanel.Dock="Top" Background="#24382D" CornerRadius="10" Padding="10" Margin="0,0,0,12">
-      <DockPanel>
-        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-          <Button Content="New" Click="New_Click" Margin="4" Padding="14,7" />
-          <Button Content="Open…" Click="Open_Click" Margin="4" Padding="14,7" />
-          <Button Content="Save" Click="Save_Click" Margin="4" Padding="14,7" />
-          <Button Content="Save As…" Click="SaveAs_Click" Margin="4" Padding="14,7" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <TextBlock Text="Maze name" Foreground="#D9E7DE" VerticalAlignment="Center" Margin="4,0,8,0" />
-          <TextBox x:Name="NameBox" Width="260" Text="Untitled maze" TextChanged="NameBox_TextChanged" Padding="7" />
-        </StackPanel>
-      </DockPanel>
-    </Border>
+  <Window.Resources>
+    <DrawingImage x:Key="SelectIcon">
+      <DrawingImage.Drawing>
+        <GeometryDrawing Brush="#202020" Geometry="M 2,1 L 2,14 L 6,10 L 9,16 L 12,14.5 L 9,9 L 15,9 Z" />
+      </DrawingImage.Drawing>
+    </DrawingImage>
+    <DrawingImage x:Key="WallIcon">
+      <DrawingImage.Drawing>
+        <GeometryDrawing Geometry="M 1,13 L 15,3">
+          <GeometryDrawing.Pen><Pen Brush="#80552D" Thickness="3" StartLineCap="Round" EndLineCap="Round" /></GeometryDrawing.Pen>
+        </GeometryDrawing>
+      </DrawingImage.Drawing>
+    </DrawingImage>
+    <DrawingImage x:Key="HoleIcon">
+      <DrawingImage.Drawing>
+        <GeometryDrawing Brush="#252525" Geometry="M 8,2 A 6,6 0 1 1 7.99,2 Z" />
+      </DrawingImage.Drawing>
+    </DrawingImage>
+    <DrawingImage x:Key="BlackHoleIcon">
+      <DrawingImage.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#252525" Geometry="M 8,1 A 7,7 0 1 1 7.99,1 Z" />
+          <GeometryDrawing Brush="#FFFFFF" Geometry="M 8,5 A 3,3 0 1 1 7.99,5 Z" />
+          <GeometryDrawing Brush="#252525" Geometry="M 8,7 A 1,1 0 1 1 7.99,7 Z" />
+        </DrawingGroup>
+      </DrawingImage.Drawing>
+    </DrawingImage>
+    <DrawingImage x:Key="DipIcon">
+      <DrawingImage.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Geometry="M 1,4 C 4,4 4,12 8,12 C 12,12 12,4 15,4">
+            <GeometryDrawing.Pen><Pen Brush="#287A4D" Thickness="2.5" StartLineCap="Round" EndLineCap="Round" /></GeometryDrawing.Pen>
+          </GeometryDrawing>
+          <GeometryDrawing Brush="#287A4D" Geometry="M 8,10 L 5.5,7.5 L 10.5,7.5 Z" />
+        </DrawingGroup>
+      </DrawingImage.Drawing>
+    </DrawingImage>
+  </Window.Resources>
+  <Window.InputBindings>
+    <KeyBinding Key="N" Modifiers="Control" Command="ApplicationCommands.New" />
+    <KeyBinding Key="O" Modifiers="Control" Command="ApplicationCommands.Open" />
+    <KeyBinding Key="S" Modifiers="Control" Command="ApplicationCommands.Save" />
+    <KeyBinding Key="Z" Modifiers="Control" Command="ApplicationCommands.Undo" />
+    <KeyBinding Key="Y" Modifiers="Control" Command="ApplicationCommands.Redo" />
+    <KeyBinding Key="Z" Modifiers="Control+Shift" Command="ApplicationCommands.Redo" />
+    <KeyBinding Key="X" Modifiers="Control" Command="ApplicationCommands.Cut" />
+    <KeyBinding Key="C" Modifiers="Control" Command="ApplicationCommands.Copy" />
+    <KeyBinding Key="V" Modifiers="Control" Command="ApplicationCommands.Paste" />
+    <KeyBinding Key="Delete" Command="ApplicationCommands.Delete" />
+  </Window.InputBindings>
+  <Window.CommandBindings>
+    <CommandBinding Command="ApplicationCommands.New" Executed="New_Executed" />
+    <CommandBinding Command="ApplicationCommands.Open" Executed="Open_Executed" />
+    <CommandBinding Command="ApplicationCommands.Save" Executed="Save_Executed" />
+    <CommandBinding Command="ApplicationCommands.Undo" Executed="Undo_Executed" CanExecute="Undo_CanExecute" />
+    <CommandBinding Command="ApplicationCommands.Redo" Executed="Redo_Executed" CanExecute="Redo_CanExecute" />
+    <CommandBinding Command="ApplicationCommands.Cut" Executed="Cut_Executed" CanExecute="Selection_CanExecute" />
+    <CommandBinding Command="ApplicationCommands.Copy" Executed="Copy_Executed" CanExecute="Selection_CanExecute" />
+    <CommandBinding Command="ApplicationCommands.Paste" Executed="Paste_Executed" CanExecute="Paste_CanExecute" />
+    <CommandBinding Command="ApplicationCommands.Delete" Executed="Delete_Executed" CanExecute="Selection_CanExecute" />
+  </Window.CommandBindings>
 
-    <Border DockPanel.Dock="Left" Width="190" Background="#24382D" CornerRadius="10" Padding="12" Margin="0,0,12,0">
-      <StackPanel>
-        <TextBlock Text="TOOLS" Foreground="#F2CF55" FontWeight="Bold" Margin="4,4,4,10" />
-        <RadioButton GroupName="Tools" Content="Select / move" Tag="Select" IsChecked="True" Checked="Tool_Checked" Margin="4,6" Foreground="#FFFCFCFC" />
-        <RadioButton GroupName="Tools" Content="Draw wall" Tag="Wall" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
-        <RadioButton GroupName="Tools" Content="Place start" Tag="Start" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
-        <RadioButton GroupName="Tools" Content="Place goal" Tag="Goal" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
-        <RadioButton GroupName="Tools" Content="Place hole" Tag="Hole" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
-        <RadioButton GroupName="Tools" Content="Place black hole" Tag="BlackHole" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
-        <RadioButton GroupName="Tools" Content="Place dip" Tag="Dip" Checked="Tool_Checked" Margin="4,6" Foreground="White" />
-        <Separator Margin="0,12" />
-        <Button Content="Delete selected" Click="Delete_Click" Padding="8" />
-        <TextBlock Text="Draw walls by dragging. In Select mode, drag a wall or marker. Hold Shift while drawing to snap horizontally or vertically."
-                   TextWrapping="Wrap" Foreground="#AFC2B6" Margin="4,16,4,0" LineHeight="18" />
-      </StackPanel>
-    </Border>
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <MenuItem Header="_New" Command="ApplicationCommands.New" InputGestureText="Ctrl+N" />
+        <MenuItem Header="_Open…" Command="ApplicationCommands.Open" InputGestureText="Ctrl+O" />
+        <MenuItem x:Name="RecentFilesMenu" Header="Recent _Files" />
+        <MenuItem x:Name="RecentFoldersMenu" Header="Recent F_olders" />
+        <Separator />
+        <MenuItem Header="_Save" Command="ApplicationCommands.Save" InputGestureText="Ctrl+S" />
+        <MenuItem Header="Save _As…" Click="SaveAs_Click" />
+        <Separator />
+        <MenuItem Header="_Close" Click="Close_Click" />
+      </MenuItem>
+      <MenuItem Header="_Edit">
+        <MenuItem Header="_Undo" Command="ApplicationCommands.Undo" InputGestureText="Ctrl+Z" />
+        <MenuItem Header="_Redo" Command="ApplicationCommands.Redo" InputGestureText="Ctrl+Y" />
+        <Separator />
+        <MenuItem Header="Cu_t" Command="ApplicationCommands.Cut" InputGestureText="Ctrl+X" />
+        <MenuItem Header="_Copy" Command="ApplicationCommands.Copy" InputGestureText="Ctrl+C" />
+        <MenuItem Header="_Paste" Command="ApplicationCommands.Paste" InputGestureText="Ctrl+V" />
+        <Separator />
+        <MenuItem Header="_Delete" Command="ApplicationCommands.Delete" InputGestureText="Del" />
+      </MenuItem>
+      <MenuItem Header="_Maze">
+        <MenuItem Header="_Select / Move" Tag="Select" IsCheckable="True"
+                  IsChecked="{Binding IsChecked, ElementName=SelectToolButton, Mode=OneWay}" Click="ToolMenu_Click">
+          <MenuItem.Icon><Image Source="{StaticResource SelectIcon}" Width="16" Height="16" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Add _Walls" IsCheckable="True"
+                  IsChecked="{Binding IsChecked, ElementName=WallToolButton, Mode=OneWay}" Click="WallTool_Click" />
+        <MenuItem Header="Add _Hole" Tag="Hole" Click="ToolMenu_Click" />
+        <MenuItem Header="Add _Dip" Tag="Dip" Click="ToolMenu_Click" />
+        <MenuItem Header="Add _Black Hole" Tag="BlackHole" Click="ToolMenu_Click" />
+      </MenuItem>
+    </Menu>
 
-    <Grid>
-      <Border Background="#263F30" BorderBrush="#A07E49" BorderThickness="8" CornerRadius="18" ClipToBounds="True">
-        <Canvas x:Name="Board" Background="#264A34" MouseLeftButtonDown="Board_MouseLeftButtonDown"
-                MouseMove="Board_MouseMove" MouseLeftButtonUp="Board_MouseLeftButtonUp" SizeChanged="Board_SizeChanged" />
-      </Border>
-      <TextBlock x:Name="StatusText" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="10"
-                 Background="#CC17251D" Foreground="White" Padding="12,6" Text="Ready" />
+    <ToolBarTray DockPanel.Dock="Top" Background="#E9E9E9">
+      <ToolBar>
+        <Button Command="ApplicationCommands.Undo" ToolTip="Undo (Ctrl+Z)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Undo" /></StackPanel></Button>
+        <Button Command="ApplicationCommands.Redo" ToolTip="Redo (Ctrl+Y or Ctrl+Shift+Z)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Redo" /></StackPanel></Button>
+        <Separator />
+        <Button Command="ApplicationCommands.Save" ToolTip="Save (Ctrl+S)">
+          <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Save" /></StackPanel>
+        </Button>
+        <Separator />
+        <Button Command="ApplicationCommands.Cut" ToolTip="Cut (Ctrl+X)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8C6;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Cut" /></StackPanel></Button>
+        <Button Command="ApplicationCommands.Copy" ToolTip="Copy (Ctrl+C)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Copy" /></StackPanel></Button>
+        <Button Command="ApplicationCommands.Paste" ToolTip="Paste (Ctrl+V)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Paste" /></StackPanel></Button>
+        <Button Command="ApplicationCommands.Delete" ToolTip="Delete selected item (Del)"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,5,0" /><TextBlock Text="Delete" /></StackPanel></Button>
+        <Separator />
+        <RadioButton x:Name="SelectToolButton" GroupName="Tools" Tag="Select" IsChecked="True"
+                     Checked="Tool_Checked" Padding="8,3" VerticalContentAlignment="Center" ToolTip="Selection mode: select or move items and stop drawing walls">
+          <StackPanel Orientation="Horizontal"><Image Source="{StaticResource SelectIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Select / Move" /></StackPanel>
+        </RadioButton>
+        <Separator />
+        <ToggleButton x:Name="WallToolButton" Click="WallTool_Click" Padding="8,3" ToolTip="Toggle wall creation mode. Hold Shift while drawing to constrain walls to horizontal or vertical.">
+          <StackPanel Orientation="Horizontal"><Image Source="{StaticResource WallIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Add Walls" /></StackPanel>
+        </ToggleButton>
+        <RadioButton x:Name="HoleToolButton" GroupName="Tools" Tag="Hole" Checked="Tool_Checked" Padding="8,3" ToolTip="Add a hole">
+          <StackPanel Orientation="Horizontal"><Image Source="{StaticResource HoleIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Add Hole" /></StackPanel>
+        </RadioButton>
+        <RadioButton x:Name="BlackHoleToolButton" GroupName="Tools" Tag="BlackHole" Checked="Tool_Checked" Padding="8,3" ToolTip="Add a black hole">
+          <StackPanel Orientation="Horizontal"><Image Source="{StaticResource BlackHoleIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Add Black Hole" /></StackPanel>
+        </RadioButton>
+        <RadioButton x:Name="DipToolButton" GroupName="Tools" Tag="Dip" Checked="Tool_Checked" Padding="8,3" ToolTip="Add a dip">
+          <StackPanel Orientation="Horizontal"><Image Source="{StaticResource DipIcon}" Width="16" Height="16" Margin="0,0,5,0" /><TextBlock Text="Add Dip" /></StackPanel>
+        </RadioButton>
+      </ToolBar>
+    </ToolBarTray>
+
+    <Grid Margin="12">
+      <Grid>
+        <Border Background="#263F30" BorderBrush="#A07E49" BorderThickness="8" CornerRadius="18" ClipToBounds="True">
+          <Canvas x:Name="Board" Background="#264A34" MouseLeftButtonDown="Board_MouseLeftButtonDown"
+                  MouseMove="Board_MouseMove" MouseLeftButtonUp="Board_MouseLeftButtonUp"
+                  LostMouseCapture="Board_LostMouseCapture" SizeChanged="Board_SizeChanged" />
+        </Border>
+        <TextBlock x:Name="StatusText" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="10"
+                   Background="#CC17251D" Foreground="White" Padding="12,6" Text="Ready" />
+      </Grid>
     </Grid>
   </DockPanel>
 </Window>

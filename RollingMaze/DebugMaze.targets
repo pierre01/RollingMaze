@@ -1,0 +1,55 @@
+<Project>
+  <!-- Capture source timestamps before packaging, which can replace file timestamps. -->
+  <UsingTask TaskName="SelectLatestDebugMaze" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Mazes ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <LevelNumber ParameterType="System.Int32" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        LevelNumber = 1;
+        DateTime latest = DateTime.MinValue;
+        foreach (var maze in Mazes)
+        {
+            string path = maze.GetMetadata("FullPath");
+            string name = Path.GetFileName(path);
+            const string suffix = ".rollingmaze.json";
+            string digits = name.Substring(5, name.Length - 5 - suffix.Length);
+            int number;
+            if (!int.TryParse(digits, out number) || number < 1 ||
+                name != "level" + number.ToString("000") + suffix)
+                continue;
+
+            DateTime modified = File.GetLastWriteTimeUtc(path);
+            if (modified > latest || (modified == latest && number < LevelNumber))
+            {
+                latest = modified;
+                LevelNumber = number;
+            }
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Re-evaluate on every build, including edits that only change maze assets. -->
+  <Target Name="GenerateDebugMaze" BeforeTargets="PrepareForBuild"
+          Condition="'$(Configuration)' == 'Debug' and '$(TargetFramework)' != ''">
+    <ItemGroup>
+      <_DebugMaze Include="Resources/Raw/levels/level*.rollingmaze.json" />
+    </ItemGroup>
+    <SelectLatestDebugMaze Mazes="@(_DebugMaze)">
+      <Output TaskParameter="LevelNumber" PropertyName="_DebugFirstLevel" />
+    </SelectLatestDebugMaze>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(IntermediateOutputPath)DebugMaze.g.cs"
+                      Lines="namespace RollingMaze { internal static class DebugMaze { internal const int FirstLevelNumber = $(_DebugFirstLevel)%3B } }"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)DebugMaze.g.cs" />
+      <FileWrites Include="$(IntermediateOutputPath)DebugMaze.g.cs" />
+    </ItemGroup>
+  </Target>
+</Project>

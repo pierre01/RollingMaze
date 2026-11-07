@@ -13,7 +13,7 @@
                            Touch="OnCanvasTouch" />
 
         <Grid Padding="18" InputTransparent="True">
-            <Grid RowDefinitions="Auto,*">
+            <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
                 <Border StrokeThickness="0"
                         BackgroundColor="#B91B2620"
                         StrokeShape="RoundRectangle 18"
@@ -24,7 +24,20 @@
                         <Label x:Name="StatusLabel" Text="Choose a ball" TextColor="White" FontSize="15" VerticalTextAlignment="Center" />
                     </HorizontalStackLayout>
                 </Border>
-                <Label Grid.Row="1"
+                <Border StrokeThickness="0"
+                        Grid.Row="1"
+                        BackgroundColor="#B91B2620"
+                        StrokeShape="RoundRectangle 18"
+                        Padding="14,9"
+                        HorizontalOptions="End">
+                    <HorizontalStackLayout Spacing="14">
+                        <Label x:Name="TimerLabel" Text="TIME 120" TextColor="#F3E8C9" FontSize="14" FontAttributes="Bold" />
+                        <Label x:Name="LivesLabel" Text="LIVES ♥♥♥" TextColor="#E76D5B" FontSize="14" FontAttributes="Bold" />
+                        <Label x:Name="ScoreLabel" Text="SCORE 0" TextColor="#8FD1A4" FontSize="14" FontAttributes="Bold" />
+                        <Label x:Name="BestScoreLabel" Text="BEST 0" TextColor="#F2CF55" FontSize="14" FontAttributes="Bold" />
+                    </HorizontalStackLayout>
+                </Border>
+                <Label Grid.Row="2"
                        Text="KNOCK BEHIND DEVICE TO BOUNCE"
                        TextColor="#8FD1A4"
                        FontSize="11"
@@ -41,7 +54,7 @@
                 <Label Text="ROLLING MAZE" TextColor="#F3E8C9" FontSize="34" FontAttributes="Bold" HorizontalTextAlignment="Center" />
                 <Label Text="Choose your ball" TextColor="#AAB9AE" FontSize="18" HorizontalTextAlignment="Center" />
 
-                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10" Margin="0,12,0,0">
+                <Grid x:Name="BallChoices" ColumnDefinitions="*,*,*" ColumnSpacing="10" Margin="0,12,0,0">
                     <Button Grid.Column="0" Text="🟤&#10;WOOD" StyleClass="BallChoice" Clicked="OnWoodClicked" />
                     <Button Grid.Column="1" Text="⚪&#10;SILVER" StyleClass="BallChoice" Clicked="OnSilverClicked" />
                     <Button Grid.Column="2" Text="🟡&#10;GOLD" StyleClass="BallChoice" Clicked="OnGoldClicked" />
@@ -51,6 +64,10 @@
                        TextColor="#819087" FontSize="11" HorizontalTextAlignment="Center" />
                 <Label Text="Tilt to roll and knock behind the device to bounce. On desktop, drag anywhere to tilt."
                        TextColor="#C3CEC7" FontSize="13" HorizontalTextAlignment="Center" Margin="0,8,0,0" />
+                <Button x:Name="CalibrateTiltButton" Text="Calibrate tilt" Clicked="OnCalibrateTiltClicked"
+                        BackgroundColor="#D8B949" TextColor="#101713" CornerRadius="18" />
+                <Label x:Name="CalibrationStatusLabel" Text="Lay the phone flat, then calibrate. Keep it still until finished."
+                       TextColor="#C3CEC7" FontSize="13" HorizontalTextAlignment="Center" />
             </VerticalStackLayout>
         </Grid>
 
@@ -59,7 +76,7 @@
                 <Label x:Name="ResultTitleLabel" Text="GOAL!" TextColor="#F2CF55" FontSize="52" FontAttributes="Bold" HorizontalTextAlignment="Center" />
                 <Label x:Name="WinDetailLabel" Text="You made it." TextColor="White" FontSize="18" HorizontalTextAlignment="Center" />
                 <Button x:Name="ContinueButton" Text="PLAY AGAIN" Clicked="OnPlayAgainClicked" BackgroundColor="#D8B949" TextColor="#101713" CornerRadius="18" Padding="28,14" />
-                <Button Text="CHANGE BALL" Clicked="OnChangeBallClicked" BackgroundColor="Transparent" BorderColor="#819087" BorderWidth="1" TextColor="#DDE6E0" CornerRadius="18" />
+                <Button x:Name="ChangeBallButton" Text="CHANGE BALL" Clicked="OnChangeBallClicked" BackgroundColor="Transparent" BorderColor="#819087" BorderWidth="1" TextColor="#DDE6E0" CornerRadius="18" />
             </VerticalStackLayout>
         </Grid>
     </Grid>

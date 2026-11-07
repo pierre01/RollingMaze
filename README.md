@@ -9,7 +9,7 @@ At the start of the game the user will be asked which type of ball they will use
 
 Work Balls with different physics work. 
 
-![Sample1](Images/Sample1.png)
+![Sample1](Images/Sample1.jpg)
 
 ## Maze files and designer
 

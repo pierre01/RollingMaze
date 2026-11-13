@@ -15,8 +15,7 @@ public static class MazeVisuals
     public const int GoalRadius = 34;
 
     /// <summary>Radius of a regular hazard opening, excluding its surrounding rim.</summary>
-    /// <remarks>The ball's diameter is approximately four-fifths of this opening's diameter.</remarks>
-    public const int HazardRadius = 27;
+    public const float HazardRadius = 23.085f;
 
     /// <summary>Radius of the black central disk drawn over the black-hole artwork.</summary>
     public const int BlackHoleRadius = 32;
@@ -31,7 +30,7 @@ public static class MazeVisuals
     public const int GoalRimGrowth = 5;
 
     /// <summary>Amount added to a hazard opening's radius to draw its thin, centered rim.</summary>
-    public const int HazardRimGrowth = 1;
+    public const float HazardRimGrowth = 0.855f;
 
     /// <summary>Read-only SVG path data for the black hole's luminous disk.</summary>
     /// <remarks>
